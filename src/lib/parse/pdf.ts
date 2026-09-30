@@ -30,7 +30,7 @@ const INCOME_HINT = /(accredito|stipendio|emolumenti|a vostro favore|a tuo favor
 
 export async function extractLines(file: File): Promise<{ lines: PdfLine[]; pages: number }> {
   const pdfjs = await import('pdfjs-dist')
-  const worker = await import('pdfjs-dist/build/pdf.worker.min.mjs?url')
+  const worker = await import('pdfjs-dist/build/pdf.worker.mjs?url')
   pdfjs.GlobalWorkerOptions.workerSrc = worker.default
   const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise
   const lines: PdfLine[] = []
