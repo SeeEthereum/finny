@@ -4,11 +4,16 @@
  */
 
 export const DEFAULT_BASE_URL = 'https://api.openai.com/v1'
+/** The Netlify Function that relays to OpenAI with the key kept server-side */
+export const SERVER_BASE_URL = '/api/ai'
 
 export interface AiConfig {
+  /** empty when the key lives on the server */
   apiKey: string
   baseUrl: string
   model: string
+  /** optional, checked by the Netlify Function when FINNY_PASSPHRASE is set */
+  passphrase?: string
 }
 
 export interface ToolCall {
@@ -35,7 +40,7 @@ export class AiError extends Error {
   }
 }
 
-async function call<T>(cfg: Pick<AiConfig, 'apiKey' | 'baseUrl'>, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+async function call<T>(cfg: Pick<AiConfig, 'apiKey' | 'baseUrl' | 'passphrase'>, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const url = `${cfg.baseUrl.replace(/\/+$/, '')}${path}`
   const timeout = new AbortController()
   const timer = setTimeout(() => timeout.abort(), 90_000)
@@ -44,7 +49,11 @@ async function call<T>(cfg: Pick<AiConfig, 'apiKey' | 'baseUrl'>, path: string, 
   try {
     res = await fetch(url, {
       method: body ? 'POST' : 'GET',
-      headers: { Authorization: `Bearer ${cfg.apiKey}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      headers: {
+        ...(cfg.apiKey ? { Authorization: `Bearer ${cfg.apiKey}` } : {}),
+        ...(cfg.passphrase ? { 'X-Finny-Pass': cfg.passphrase } : {}),
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+      },
       body: body ? JSON.stringify(body) : undefined,
       signal: timeout.signal,
     })
@@ -68,6 +77,10 @@ async function call<T>(cfg: Pick<AiConfig, 'apiKey' | 'baseUrl'>, path: string, 
     }
     if (res.status === 401) throw new AiError('auth', 'La chiave API non è valida o è stata revocata.')
     if (res.status === 429) throw new AiError('quota', `Limite raggiunto: credito esaurito o troppe richieste. ${detail}`.trim())
+    if (res.status === 404 && cfg.baseUrl === SERVER_BASE_URL && !detail) {
+      throw new AiError('server', 'La funzione AI non è attiva su questo sito: funziona solo sul deploy di Netlify.')
+    }
+    if (res.status === 403) throw new AiError('auth', detail || 'Accesso rifiutato.')
     if (res.status === 404 || res.status === 400) throw new AiError('model', detail || `Richiesta rifiutata (${res.status}).`)
     throw new AiError('server', `Il servizio ha risposto con un errore (${res.status}). ${detail}`.trim())
   }
@@ -75,7 +88,7 @@ async function call<T>(cfg: Pick<AiConfig, 'apiKey' | 'baseUrl'>, path: string, 
 }
 
 /** Lists chat-capable models available to this key; also proves the key works. */
-export async function listModels(cfg: Pick<AiConfig, 'apiKey' | 'baseUrl'>): Promise<string[]> {
+export async function listModels(cfg: Pick<AiConfig, 'apiKey' | 'baseUrl' | 'passphrase'>): Promise<string[]> {
   const data = await call<{ data?: { id: string }[] }>(cfg, '/models')
   const ids = (data.data ?? []).map((m) => m.id)
   // OpenAI lists embeddings, audio, image models too: keep the ones that can chat

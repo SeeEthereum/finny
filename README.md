@@ -69,8 +69,14 @@ Stack: Vite, React 19, TypeScript, Tailwind CSS 4, Motion, pdf.js, read-excel-fi
 
 La pagina **Chiedi** risponde a domande libere sui tuoi movimenti ("quanto spendo per mangiare fuori?", "fammi il report del mese", "dove posso risparmiare 200 €?"). In **Movimenti**, inoltre, un pulsante propone una categoria per gli esercenti finiti in "Altro".
 
-Come funziona:
-- Usa una chiave API di OpenAI, o di un servizio compatibile, che inserisci in *Impostazioni → Assistente AI*. La chiave resta nel database locale del browser: non è nel codice, non va nel backup, non passa da Netlify. **Non metterla in una variabile `VITE_*`**: finirebbe nel JavaScript pubblico del sito.
+Dove sta la chiave (scegli in *Impostazioni → Assistente AI*):
+- **Chiave su Netlify (predefinita).** Su Netlify, *Site configuration → Environment variables*, aggiungi `OPENAI_API_KEY` e rifai il deploy. La funzione `netlify/functions/ai.mjs`, esposta su `/api/ai/*`, aggiunge la chiave lato server: il browser non la vede mai. La funzione inoltra solo `GET /models` e `POST /chat/completions`, accetta solo richieste dal sito stesso e limita la dimensione delle richieste. Se imposti anche `FINNY_PASSPHRASE`, ogni richiesta deve portarla (la inserisci nell'app). Facoltative: `OPENAI_BASE_URL` per un servizio compatibile diverso da OpenAI.
+- **Chiave nel browser.** Utile in locale o con un modello su `localhost`: la chiave resta nel database del browser e non entra nel backup.
+- **Mai in una variabile `VITE_*`**: Vite la inserirebbe nel JavaScript pubblico del sito.
+
+Il controllo sull'origine blocca altri siti web, ma non chi chiama la funzione a mano falsificando l'header `Origin`. La protezione con password del sito Netlify, a quanto risulta, non copre le Functions: se l'indirizzo del sito è noto ad altri, imposta `FINNY_PASSPHRASE` e un limite di spesa su OpenAI.
+
+Come lavora il modello:
 - Il modello non riceve la lista dei movimenti. Chiede a Finny i dati tramite funzioni che girano nel browser (`src/lib/ai/tools.ts`): riepilogo mensile, spese per categoria o esercente, movimenti filtrati (max 50), ricorrenti, budget, saldo. Causali originali, IBAN e nomi dei conti non escono mai. Sotto ogni risposta c'è l'elenco esatto dei dati inviati.
 - Per ricategorizzare vengono inviati solo i nomi degli esercenti e se si tratta di entrata o uscita.
 - Opzione "Solo le categorie": al posto dei nomi degli esercenti viene inviata la categoria.

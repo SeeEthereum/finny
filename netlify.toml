@@ -7,3 +7,6 @@
   NODE_VERSION = "22"
 
 # Security headers live in public/_headers, so they also apply when dist/ is dropped on Netlify by hand.
+
+[functions]
+  directory = "netlify/functions"

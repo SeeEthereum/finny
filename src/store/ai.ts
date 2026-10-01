@@ -1,10 +1,13 @@
 import { del, get, set } from 'idb-keyval'
 import { create } from 'zustand'
-import { DEFAULT_BASE_URL, type AiConfig } from '../lib/ai/client'
+import { DEFAULT_BASE_URL, SERVER_BASE_URL, type AiConfig } from '../lib/ai/client'
 
 const KEY = 'finny:ai:v1'
 
 interface AiSettings {
+  /** server: the key sits in Netlify's environment; browser: the key is stored here */
+  mode: 'server' | 'browser'
+  passphrase: string
   enabled: boolean
   apiKey: string
   baseUrl: string
@@ -24,6 +27,8 @@ export const useAi = create<
     forget: () => Promise<void>
   }
 >((setState, getState) => ({
+  mode: 'server',
+  passphrase: '',
   enabled: false,
   apiKey: '',
   baseUrl: DEFAULT_BASE_URL,
@@ -33,18 +38,22 @@ export const useAi = create<
   load: async () => {
     try {
       const saved = await get<AiSettings>(KEY)
-      if (saved) setState(saved)
+      // settings saved before the server mode existed used a key in the browser
+      if (saved) {
+        const legacy = saved as Partial<AiSettings>
+        setState({ ...saved, mode: legacy.mode ?? (saved.apiKey ? 'browser' : 'server'), passphrase: legacy.passphrase ?? '' })
+      }
     } catch {
       /* settings stay for this visit only */
     }
   },
   update: (patch) => {
     setState(patch)
-    const { enabled, apiKey, baseUrl, model, models, shareMerchants } = getState()
-    set(KEY, { enabled, apiKey, baseUrl, model, models, shareMerchants }).catch(() => {})
+    const { mode, passphrase, enabled, apiKey, baseUrl, model, models, shareMerchants } = getState()
+    set(KEY, { mode, passphrase, enabled, apiKey, baseUrl, model, models, shareMerchants }).catch(() => {})
   },
   forget: async () => {
-    setState({ enabled: false, apiKey: '', model: '', models: [] })
+    setState({ enabled: false, apiKey: '', passphrase: '', model: '', models: [] })
     try {
       await del(KEY)
     } catch {
@@ -53,10 +62,11 @@ export const useAi = create<
   },
 }))
 
-export function aiConfig(s: Pick<AiSettings, 'apiKey' | 'baseUrl' | 'model'>): AiConfig {
+export function aiConfig(s: Pick<AiSettings, 'mode' | 'passphrase' | 'apiKey' | 'baseUrl' | 'model'>): AiConfig {
+  if (s.mode === 'server') return { apiKey: '', baseUrl: SERVER_BASE_URL, model: s.model, passphrase: s.passphrase || undefined }
   return { apiKey: s.apiKey, baseUrl: s.baseUrl || DEFAULT_BASE_URL, model: s.model }
 }
 
 export function useAiReady() {
-  return useAi((s) => s.enabled && !!s.apiKey && !!s.model)
+  return useAi((s) => s.enabled && !!s.model && (s.mode === 'server' || !!s.apiKey))
 }
