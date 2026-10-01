@@ -151,6 +151,45 @@ describe('PDF with vertically centered multi-line cells', () => {
   })
 })
 
+describe('PDF formats seen on real statements', () => {
+  const l = (y: number, items: [number, string][], page = 1): PdfLine => ({ page, y, items: items.map(([x, str]) => ({ x, w: str.length * 5, str })) })
+
+  it('reads dates without a year using the statement period', () => {
+    const res = parsePdfLines([
+      l(800, [[30, 'Estratto conto dal 01/12/2025 al 31/01/2026']]),
+      l(760, [[30, 'Data'], [90, 'Valuta'], [160, 'Descrizione'], [430, 'Dare'], [480, 'Avere']]),
+      l(740, [[30, '28/12'], [90, '28/12'], [160, 'PAGAMENTO POS CONAD'], [425, '32,40']]),
+      l(720, [[30, '27/01'], [90, '27/01'], [160, 'ACCREDITO STIPENDIO'], [475, '2.380,00']]),
+    ])
+    expect(res.drafts.map((d) => [d.date, d.amount])).toEqual([
+      ['2025-12-28', -32.4],
+      ['2026-01-27', 2380],
+    ])
+  })
+
+  it('reads month names, euro signs and amounts glued to the description', () => {
+    const res = parsePdfLines([
+      l(740, [[30, '2 set 2026 Esselunga Milano -45,20 €']]),
+      l(720, [[30, '27 set 2026 Stipendio ACME +2.380,00 €']]),
+      l(700, [[30, '28 set 2026'], [120, 'Glovo'], [400, '€ -18,90']]),
+    ])
+    expect(res.signSource).toBe('explicit')
+    expect(res.drafts.map((d) => [d.date, d.description, d.amount])).toEqual([
+      ['2026-09-02', 'Esselunga Milano', -45.2],
+      ['2026-09-27', 'Stipendio ACME', 2380],
+      ['2026-09-28', 'Glovo', -18.9],
+    ])
+  })
+
+  it('ignores times and numbers inside the description', () => {
+    const res = parsePdfLines([
+      l(760, [[30, 'Data'], [160, 'Descrizione'], [430, 'Uscite'], [480, 'Entrate'], [540, 'Saldo']]),
+      l(740, [[30, '02.09.26'], [160, 'PAGAMENTO POS ORE 12.30 BAR 4,50'], [425, '4,50'], [535, '995,50']]),
+    ])
+    expect(res.drafts.map((d) => d.amount)).toEqual([-4.5])
+  })
+})
+
 describe('demo analytics', () => {
   const demo = demoSnapshot()
   it('produces a year of data with positive savings', () => {

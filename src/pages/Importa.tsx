@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Check, FileSpreadsheet, FileText, FileUp, Loader2, Lock, RotateCcw, ShieldCheck, TriangleAlert } from 'lucide-react'
+import { ArrowLeftRight, Check, Copy, FileSearch, FileSpreadsheet, FileText, FileUp, KeyRound, Loader2, Lock, RotateCcw, ShieldCheck, TriangleAlert } from 'lucide-react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { Confetti } from '../components/Confetti'
@@ -6,7 +6,7 @@ import { PageHeader } from '../components/shared'
 import { toast } from '../components/ui/toast'
 import { Button, Card, cx } from '../components/ui/primitives'
 import { money, shortDate } from '../lib/format'
-import { readPdf, type PdfResult } from '../lib/parse/pdf'
+import { PdfPasswordError, readPdf, type PdfResult } from '../lib/parse/pdf'
 import { fileKind, ImportError, readCsv, readXlsx, type FileKind } from '../lib/parse/readers'
 import { detectTable, mappingProblems, toDrafts, type DetectedTable, type DraftTx, type Mapping } from '../lib/parse/table'
 import { cellText } from '../lib/parse/values'
@@ -19,6 +19,9 @@ type Stage =
   | { kind: 'table'; name: string; fileKind: FileKind; table: DetectedTable }
   | { kind: 'pdf'; name: string; result: PdfResult }
   | { kind: 'done'; name: string; outcome: ImportOutcome }
+  | { kind: 'password'; file: File; rest: File[]; incorrect: boolean }
+  | { kind: 'nothing'; name: string; pages: number; text: string[] }
+  | { kind: 'error'; name: string; detail: string }
 
 function guessName(file: string) {
   const f = file.toLowerCase()
@@ -36,7 +39,7 @@ export default function Importa() {
   const [queue, setQueue] = useState<File[]>([])
   const [confetti, setConfetti] = useState(0)
 
-  const process = useCallback(async (file: File, rest: File[]) => {
+  const process = useCallback(async (file: File, rest: File[], password?: string) => {
     setQueue(rest)
     const kind = fileKind(file)
     if (!kind) {
@@ -47,11 +50,10 @@ export default function Importa() {
     setStage({ kind: 'reading', name: file.name })
     try {
       if (kind === 'pdf') {
-        const result = await readPdf(file)
+        const result = await readPdf(file, password)
         if (!result.drafts.length) {
-          throw new ImportError(
-            'Non ho trovato movimenti in questo PDF. Se è una scansione (un\'immagine) non contiene testo leggibile: scarica dalla banca il CSV o l\'Excel.',
-          )
+          setStage({ kind: 'nothing', name: file.name, pages: result.pages, text: result.text })
+          return
         }
         setStage({ kind: 'pdf', name: file.name, result })
       } else {
@@ -59,8 +61,15 @@ export default function Importa() {
         setStage({ kind: 'table', name: file.name, fileKind: kind, table: detectTable(grid) })
       }
     } catch (e) {
-      toast(e instanceof ImportError ? e.message : `Non riesco a leggere ${file.name}. Il file potrebbe essere protetto o danneggiato.`, 'error')
-      setStage({ kind: 'idle' })
+      if (e instanceof PdfPasswordError) {
+        setStage({ kind: 'password', file, rest, incorrect: e.incorrect })
+      } else if (e instanceof ImportError) {
+        toast(e.message, 'error')
+        setStage({ kind: 'idle' })
+      } else {
+        const detail = e instanceof Error ? `${e.name}: ${e.message}` : String(e)
+        setStage({ kind: 'error', name: file.name, detail })
+      }
     }
   }, [])
 
@@ -102,6 +111,36 @@ export default function Importa() {
         {stage.kind === 'pdf' && (
           <motion.div key={`pdf-${stage.name}`} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}>
             <PdfReview stage={stage} onCancel={() => setStage({ kind: 'idle' })} onDone={finish} />
+          </motion.div>
+        )}
+        {stage.kind === 'password' && (
+          <motion.div key="password" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}>
+            <PasswordStep stage={stage} onSubmit={(pw) => process(stage.file, stage.rest, pw)} onCancel={() => setStage({ kind: 'idle' })} />
+          </motion.div>
+        )}
+        {stage.kind === 'nothing' && (
+          <motion.div key="nothing" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}>
+            <Diagnostic stage={stage} onBack={() => setStage({ kind: 'idle' })} />
+          </motion.div>
+        )}
+        {stage.kind === 'error' && (
+          <motion.div key="error" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}>
+            <Card className="p-6 sm:p-8">
+              <div className="flex items-start gap-3">
+                <TriangleAlert className="mt-0.5 shrink-0 text-critical" size={22} />
+                <div className="min-w-0">
+                  <h2 className="text-lg font-semibold text-fg">Non sono riuscito ad aprire {stage.name}</h2>
+                  <p className="mt-1 text-sm text-fg-2">
+                    Il problema è nella lettura del file, prima ancora di cercare i movimenti. Se il file si apre normalmente sul tuo computer, il dettaglio qui sotto mi serve per capire cosa non va: non contiene dati del conto.
+                  </p>
+                  <pre className="mt-3 overflow-x-auto rounded-xl border border-line bg-bg-2 p-3 font-mono text-xs whitespace-pre-wrap text-fg-2">{stage.detail}</pre>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <CopyButton text={`Finny · errore import · ${stage.detail} · ${navigator.userAgent}`} label="Copia dettaglio" />
+                    <Button onClick={() => setStage({ kind: 'idle' })}>Riprova con un altro file</Button>
+                  </div>
+                </div>
+              </div>
+            </Card>
           </motion.div>
         )}
         {stage.kind === 'done' && (
@@ -181,6 +220,113 @@ function DropZone({ onFiles }: { onFiles: (f: File[]) => void }) {
         }}
       />
     </div>
+  )
+}
+
+function CopyButton({ text, label }: { text: string; label: string }) {
+  return (
+    <Button
+      variant="secondary"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text)
+          toast('Copiato negli appunti')
+        } catch {
+          toast('Il browser non permette di copiare: seleziona il testo a mano.', 'error')
+        }
+      }}
+    >
+      <Copy size={15} /> {label}
+    </Button>
+  )
+}
+
+function PasswordStep({
+  stage,
+  onSubmit,
+  onCancel,
+}: {
+  stage: Extract<Stage, { kind: 'password' }>
+  onSubmit: (pw: string) => void
+  onCancel: () => void
+}) {
+  const [pw, setPw] = useState('')
+  return (
+    <Card className="mx-auto max-w-lg p-6 sm:p-8">
+      <motion.div
+        animate={stage.incorrect ? { x: [0, -10, 10, -6, 6, 0] } : undefined}
+        transition={{ duration: 0.4 }}
+        className="grid size-14 place-items-center rounded-2xl border border-accent/40 bg-accent-soft text-accent"
+      >
+        <KeyRound size={26} />
+      </motion.div>
+      <h2 className="mt-5 text-xl font-semibold text-fg">{stage.incorrect ? 'Password non corretta' : 'Questo PDF è protetto'}</h2>
+      <p className="mt-1 text-sm text-fg-2">
+        Molte banche proteggono l'estratto conto con una password, spesso il codice fiscale o una parte di esso: la trovi nella mail o nell'area documenti della banca. La password serve solo ad aprire il file qui e non viene salvata.
+      </p>
+      <form
+        className="mt-5 flex flex-col gap-3 sm:flex-row"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (pw) onSubmit(pw)
+        }}
+      >
+        <input
+          id="pdf-password"
+          type="password"
+          autoFocus
+          autoComplete="off"
+          value={pw}
+          onChange={(e) => setPw(e.target.value)}
+          placeholder="Password del PDF"
+          className={cx(
+            'h-11 flex-1 rounded-xl border bg-bg-2 px-3 text-fg outline-none placeholder:text-muted focus:border-accent/60',
+            stage.incorrect ? 'border-critical/60' : 'border-line',
+          )}
+        />
+        <Button type="submit" disabled={!pw}>
+          Apri
+        </Button>
+      </form>
+      <button onClick={onCancel} className="mt-4 text-sm text-muted hover:text-fg">
+        Annulla
+      </button>
+    </Card>
+  )
+}
+
+function Diagnostic({ stage, onBack }: { stage: Extract<Stage, { kind: 'nothing' }>; onBack: () => void }) {
+  const empty = stage.text.length === 0
+  const sample = stage.text.slice(0, 80).join('\n')
+  return (
+    <Card className="p-6 sm:p-8">
+      <div className="flex items-start gap-3">
+        <FileSearch className="mt-0.5 shrink-0 text-warning" size={22} />
+        <div className="min-w-0 flex-1">
+          <h2 className="text-lg font-semibold text-fg">{empty ? 'Questo PDF non contiene testo' : 'Ho letto il PDF ma non riconosco i movimenti'}</h2>
+          {empty ? (
+            <p className="mt-1 text-sm text-fg-2">
+              È una scansione o un'immagine: per leggerla servirebbe il riconoscimento ottico (OCR), che Finny non fa. Scarica dall'home banking lo stesso periodo in CSV o Excel.
+            </p>
+          ) : (
+            <>
+              <p className="mt-1 text-sm text-fg-2">
+                Qui sotto c'è il testo che ho estratto da {stage.pages} {stage.pages === 1 ? 'pagina' : 'pagine'}, così come lo vedo io. Finny cerca righe che iniziano con una data e contengono un importo: se il tuo estratto è impaginato diversamente, da questo testo si capisce come adattarlo.
+              </p>
+              <div className="mt-3 flex items-start gap-2 rounded-xl border border-warning/40 bg-warning/10 p-3 text-sm text-fg">
+                <TriangleAlert size={16} className="mt-0.5 shrink-0 text-warning" />
+                Il testo contiene dati personali (nome, IBAN, movimenti). Se lo condividi per farmi sistemare il formato, prima cancella o sostituisci quei dati: bastano 10-15 righe con intestazione e qualche movimento.
+              </div>
+              <pre className="scroll-thin mt-3 max-h-[360px] overflow-auto rounded-xl border border-line bg-bg-2 p-3 font-mono text-[11.5px] leading-relaxed whitespace-pre text-fg-2">{sample}</pre>
+            </>
+          )}
+          <div className="mt-4 flex flex-wrap gap-2">
+            {!empty && <CopyButton text={sample} label="Copia il testo estratto" />}
+            <Button onClick={onBack}>Prova un altro file</Button>
+          </div>
+        </div>
+      </div>
+    </Card>
   )
 }
 

@@ -18,21 +18,48 @@ export interface PdfResult {
   /** how the money direction was worked out, shown to the user as a warning level */
   signSource: 'columns' | 'explicit' | 'guess'
   pages: number
+  /** the text Finny extracted, line by line, for the diagnostic view when nothing is found */
+  text: string[]
 }
 
-const DATE_RE = /^\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}$/
-const AMOUNT_RE = /^[-+−]?\(?€?\s?\d{1,3}(?:[.'\s]\d{3})*[.,]\d{2}\)?-?$|^[-+−]?\d+[.,]\d{2}-?$/
-const DEBIT_HDR = /^(dare|addebiti|addebito|uscite|uscita|debit[oi]?|importo dare|money out)$/i
-const CREDIT_HDR = /^(avere|accrediti|accredito|entrate|entrata|credit[oi]?|importo avere|money in)$/i
+/** Thrown when the PDF is encrypted; `incorrect` means a password was given but was wrong */
+export class PdfPasswordError extends Error {
+  incorrect: boolean
+  constructor(incorrect: boolean) {
+    super(incorrect ? 'Password errata' : 'Il PDF è protetto da password')
+    this.incorrect = incorrect
+  }
+}
+
+const MONTHS = 'gen|feb|mar|apr|mag|giu|lug|ago|set|ott|nov|dic|jan|may|jun|jul|aug|sep|sept|oct|dec|gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre|january|february|march|april|june|july|august|september|october|november|december'
+// one date as statements print it: 02/09/2026 · 02.09.26 · 02/09 · 2 set 2026 · 02 SET · Sep 2, 2026
+const DATE_SRC = `(?:\\d{1,2}[/.-]\\d{1,2}(?:[/.-]\\d{2,4})?(?![\\d.,])|\\d{1,2}\\s+(?:${MONTHS})\\.?(?:\\s+\\d{2,4})?(?![\\d])|(?:${MONTHS})\\.?\\s+\\d{1,2},?\\s+\\d{4})`
+const LEADING_DATES = new RegExp(`^\\s*(${DATE_SRC})(?:\\s+(${DATE_SRC}))?(?=\\s|$)`, 'i')
+const FULL_DATE_ANYWHERE = /\b(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})\b/g
+const MONEY = String.raw`(?:€|eur)?\s?[-+−]?\(?\d{1,3}(?:[.'\s ]\d{3})*[.,]\d{2}\)?-?\s?(?:€|eur)?|[-+−]?\d+[.,]\d{2}-?\s?(?:€|eur)?`
+const AMOUNT_RE = new RegExp(`^(?:[-+−]\\s?)?(?:${MONEY})$`, 'i')
+const TRAILING_AMOUNT = new RegExp(`(?<!\\b(?:ore|h))\\s+(?=(?:[-+−]\\s?)?(?:€\\s?)?\\d{1,3}(?:[.' ]\\d{3})*[.,]\\d{2}(?:\\s?(?:€|eur))?-?(?:\\s|$))`, 'i')
+const DEBIT_HDR = /^(dare|addebiti|addebito|uscite|uscita|debit[oi]?|importo dare|money out|in uscita)$/i
+const CREDIT_HDR = /^(avere|accrediti|accredito|entrate|entrata|credit[oi]?|importo avere|money in|in entrata)$/i
 const BALANCE_HDR = /^(saldo|balance)$/i
 const STOP_RE = /^(saldo|totale|pagina|page|riporto|segue|estratto conto|codice iban|iban)/i
 const INCOME_HINT = /(accredito|stipendio|emolumenti|a vostro favore|a tuo favore|ricevuto|rimborso|storno|versamento|incasso|entrata|refund|salary)/i
+const HEADER_WORD = /^(data|valuta|descrizione|causale|operazione|dare|avere|saldo|importo|entrate|uscite|addebiti|accrediti|divisa)$/i
 
-export async function extractLines(file: File): Promise<{ lines: PdfLine[]; pages: number }> {
-  const pdfjs = await import('pdfjs-dist')
-  const worker = await import('pdfjs-dist/build/pdf.worker.mjs?url')
+export async function extractLines(file: File, password?: string): Promise<{ lines: PdfLine[]; pages: number }> {
+  // the legacy build also runs on browsers that lack the newest JavaScript features (older Safari/iOS)
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
+  const worker = await import('pdfjs-dist/legacy/build/pdf.worker.mjs?url')
   pdfjs.GlobalWorkerOptions.workerSrc = worker.default
-  const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise
+  let doc
+  try {
+    doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()), password }).promise
+  } catch (e) {
+    if (e && typeof e === 'object' && 'name' in e && e.name === 'PasswordException') {
+      throw new PdfPasswordError((e as { code?: number }).code === pdfjs.PasswordResponses.INCORRECT_PASSWORD)
+    }
+    throw e
+  }
   const lines: PdfLine[] = []
   for (let p = 1; p <= doc.numPages; p++) {
     const page = await doc.getPage(p)
@@ -56,12 +83,16 @@ export async function extractLines(file: File): Promise<{ lines: PdfLine[]; page
   return { lines, pages: doc.numPages }
 }
 
-/** Splits items like "12/03/2026 PAGAMENTO POS" or "2.380,00 4.298,31" that pdf.js returns as one run. */
+/**
+ * Splits runs that pdf.js returns as one string: "12/03/2026 PAGAMENTO POS",
+ * "2.380,00 4.298,31", "ESSELUNGA MILANO 45,20".
+ */
 function tokens(line: PdfLine): Item[] {
   const out: Item[] = []
   for (const it of line.items) {
     const parts = it.str
-      .split(/\s{2,}|\s(?=\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}\b)|(?<=\b\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4})\s|(?<=\d[.,]\d{2}-?)\s+(?=[-+−(]?\d)/)
+      .split(/\s{2,}|(?<=\d[.,]\d{2}-?(?:\s?€)?)\s+(?=[-+−(€]?\s?\d)/)
+      .flatMap((p) => (/[a-z]{2}/i.test(p) ? p.split(TRAILING_AMOUNT) : [p]))
       .filter((p) => p.trim())
     if (parts.length === 1) {
       out.push({ ...it, str: it.str.trim() })
@@ -78,8 +109,62 @@ function tokens(line: PdfLine): Item[] {
   return out.filter((t) => t.str)
 }
 
-const isAmount = (t: Item) => AMOUNT_RE.test(t.str.replace(/\s/g, ''))
-const HEADER_WORD = /^(data|valuta|descrizione|causale|operazione|dare|avere|saldo|importo|entrate|uscite|addebiti|accrediti|divisa)$/i
+const isAmount = (t: Item) => AMOUNT_RE.test(t.str.trim()) && /[.,]\d{2}/.test(t.str)
+
+/** Removes the leading date(s) from the tokens and returns the first one */
+function takeLeadingDates(ts: Item[]): { raw: string; rest: Item[] } | null {
+  const text = ts.map((t) => t.str).join(' ')
+  const m = text.match(LEADING_DATES)
+  if (!m) return null
+  const toEat = m[0].trim().length
+  const rest: Item[] = []
+  let eaten = 0
+  for (const t of ts) {
+    if (eaten >= toEat) {
+      rest.push(t)
+      continue
+    }
+    const remaining = toEat - eaten
+    if (t.str.length <= remaining) {
+      eaten += t.str.length + 1 // the joining space
+    } else {
+      const tail = t.str.slice(remaining).trim()
+      if (tail) rest.push({ ...t, str: tail })
+      eaten = toEat
+    }
+  }
+  return { raw: m[1], rest }
+}
+
+/** Latest complete date printed anywhere: the reference year for dates written as "02/09" */
+function referenceDate(lines: PdfLine[]) {
+  let best = ''
+  for (const l of lines) {
+    for (const it of l.items) {
+      for (const m of it.str.matchAll(FULL_DATE_ANYWHERE)) {
+        const iso = parseDate(m[0])
+        if (iso && iso > best) best = iso
+      }
+    }
+  }
+  return best || new Date().toISOString().slice(0, 10)
+}
+
+function resolveDate(raw: string, ref: string): string | null {
+  const full = parseDate(raw)
+  if (full) return full
+  // no year: take the statement's year, or the one before if that would land after the statement
+  const year = Number(ref.slice(0, 4))
+  const withYear = (y: number) => {
+    const named = raw.match(/^(\d{1,2})\s+([a-zà-ü]+)\.?$/i)
+    return named ? parseDate(`${named[1]} ${named[2]} ${y}`) : parseDate(`${raw.replace(/[.-]/g, '/')}/${y}`)
+  }
+  const guess = withYear(year)
+  if (!guess) return null
+  const limit = new Date(`${ref}T00:00:00Z`)
+  limit.setUTCDate(limit.getUTCDate() + 45)
+  return guess > limit.toISOString().slice(0, 10) ? withYear(year - 1) : guess
+}
 
 export function parsePdfLines(lines: PdfLine[], pages = 1): PdfResult {
   let debitX: number | null = null
@@ -97,6 +182,7 @@ export function parsePdfLines(lines: PdfLine[], pages = 1): PdfResult {
       break
     }
   }
+  const ref = referenceDate(lines)
 
   // pass 1: every line that starts with a date and carries an amount is a movement
   interface Anchor { line: PdfLine; draft: DraftTx; before: string[]; after: string[] }
@@ -105,36 +191,37 @@ export function parsePdfLines(lines: PdfLine[], pages = 1): PdfResult {
   let explicitSigns = 0
 
   for (const l of lines) {
-    const ts = tokens(l)
-    const text = ts.map((t) => t.str).join(' ')
-    const first = ts[0]?.str ?? ''
+    const all = tokens(l)
+    const text = all.map((t) => t.str).join(' ')
+    const lead = takeLeadingDates(all)
+    const ts = lead ? lead.rest : all
     const amounts = ts.filter(isAmount)
-    if (!DATE_RE.test(first) || !amounts.length) {
-      const headerish = ts.length > 1 && ts.every((t) => HEADER_WORD.test(t.str))
-      if (!amounts.length && !STOP_RE.test(text) && !headerish) loose.push({ line: l, text })
+    if (!lead || !amounts.length) {
+      const headerish = all.length > 1 && all.every((t) => HEADER_WORD.test(t.str))
+      if (!all.some(isAmount) && !STOP_RE.test(text) && !headerish) loose.push({ line: l, text })
       continue
     }
-    const date = parseDate(first)
+    const date = resolveDate(lead.raw, ref)
     if (!date) continue
     let chosen = amounts[0]
     let sign: 1 | -1 | 0 = 0
     if (debitX != null && creditX != null) {
       const center = (t: Item) => t.x + t.w / 2
-      const candidates = amounts.filter(
-        (t) => balanceX == null || Math.abs(center(t) - balanceX) > Math.min(Math.abs(center(t) - debitX!), Math.abs(center(t) - creditX!)),
-      )
-      chosen = candidates[0] ?? amounts[0]
+      const toColumns = (t: Item) => Math.min(Math.abs(center(t) - debitX!), Math.abs(center(t) - creditX!))
+      // the amount sits under Dare or Avere; numbers inside the description or under Saldo don't count
+      const candidates = amounts.filter((t) => balanceX == null || Math.abs(center(t) - balanceX) > toColumns(t))
+      chosen = (candidates.length ? candidates : amounts).reduce((a, b) => (toColumns(b) < toColumns(a) ? b : a))
       sign = Math.abs(center(chosen) - debitX) < Math.abs(center(chosen) - creditX) ? -1 : 1
     }
     const value = parseAmount(chosen.str)
     if (value == null || value === 0) continue
     const raw = chosen.str.trim()
-    if (sign === 0 && (/^[-−(]|-$/.test(raw) || raw.startsWith('+'))) {
+    if (sign === 0 && (/^(€\s?)?[-−(]|-(\s?€)?$/.test(raw) || raw.startsWith('+'))) {
       sign = value < 0 ? -1 : 1
       explicitSigns++
     }
     const description = ts
-      .filter((t) => !amounts.includes(t) && !DATE_RE.test(t.str))
+      .filter((t) => !amounts.includes(t))
       .map((t) => t.str)
       .join(' ')
       .trim()
@@ -157,8 +244,12 @@ export function parsePdfLines(lines: PdfLine[], pages = 1): PdfResult {
 
   // pass 2: text-only lines belong to the closest movement on the same page, above or below,
   // which covers both top-aligned and vertically centered multi-line descriptions
-  const gaps = anchors.slice(1).filter((a, i) => a.line.page === anchors[i].line.page).map((a, i) => Math.abs(anchors[i].line.y - a.line.y))
-  const rowGap = gaps.length ? gaps.sort((a, b) => a - b)[Math.floor(gaps.length / 2)] : 14
+  const gaps: number[] = []
+  for (let i = 1; i < anchors.length; i++) {
+    if (anchors[i].line.page === anchors[i - 1].line.page) gaps.push(Math.abs(anchors[i - 1].line.y - anchors[i].line.y))
+  }
+  gaps.sort((a, b) => a - b)
+  const rowGap = gaps.length ? gaps[Math.floor(gaps.length / 2)] : 14
   for (const { line, text } of loose) {
     let best: Anchor | null = null
     let dist = Infinity
@@ -181,10 +272,11 @@ export function parsePdfLines(lines: PdfLine[], pages = 1): PdfResult {
   }))
   const signSource: PdfResult['signSource'] =
     debitX != null ? 'columns' : explicitSigns > drafts.length / 2 ? 'explicit' : 'guess'
-  return { drafts, signSource, pages }
+  const text = lines.map((l) => l.items.map((i) => i.str).join('   '))
+  return { drafts, signSource, pages, text }
 }
 
-export async function readPdf(file: File): Promise<PdfResult> {
-  const { lines, pages } = await extractLines(file)
+export async function readPdf(file: File, password?: string): Promise<PdfResult> {
+  const { lines, pages } = await extractLines(file, password)
   return parsePdfLines(lines, pages)
 }
