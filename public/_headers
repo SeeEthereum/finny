@@ -1,7 +1,8 @@
 # Netlify headers. Applied whether the site is deployed from Git or by dropping the dist folder.
-# connect-src 'self' means the page cannot send your statements anywhere.
+# connect-src: the page can talk only to itself, to the OpenAI API (used only if you turn the assistant on)
+# and to a local model server (Ollama). It cannot send your statements anywhere else.
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://api.openai.com http://localhost:11434 http://127.0.0.1:11434; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
   Referrer-Policy: no-referrer
   X-Content-Type-Options: nosniff
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()

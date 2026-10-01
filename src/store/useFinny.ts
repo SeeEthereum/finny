@@ -62,7 +62,7 @@ function snapshotOf(s: State): Snapshot {
   }
 }
 
-const VIEWS: View[] = ['home', 'movimenti', 'analisi', 'abbonamenti', 'budget', 'importa', 'collega', 'impostazioni']
+const VIEWS: View[] = ['home', 'movimenti', 'analisi', 'chiedi', 'abbonamenti', 'budget', 'importa', 'collega', 'impostazioni']
 
 function viewFromHash(): View {
   try {

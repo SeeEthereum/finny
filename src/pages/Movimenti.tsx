@@ -2,6 +2,7 @@ import { Search, Trash2, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useMemo, useState } from 'react'
 import { Empty, PageHeader, TxRow } from '../components/shared'
+import { AiCategorize } from '../components/AiCategorize'
 import { Sheet } from '../components/ui/Sheet'
 import { toast } from '../components/ui/toast'
 import { Button, Card, CategoryIcon, cx, Segmented } from '../components/ui/primitives'
@@ -64,7 +65,9 @@ export default function Movimenti() {
 
   return (
     <>
-      <PageHeader eyebrow="Movimenti" title="Ogni euro, al suo posto." />
+      <PageHeader eyebrow="Movimenti" title="Ogni euro, al suo posto.">
+        <AiCategorize />
+      </PageHeader>
 
       <Card className="sticky top-[calc(env(safe-area-inset-top,0px)+62px)] z-20 p-3 backdrop-blur-xl sm:p-4 lg:top-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">

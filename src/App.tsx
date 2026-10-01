@@ -5,6 +5,7 @@ import { Ambient } from './components/ui/Ambient'
 import { Mark } from './components/ui/Brand'
 import { Toaster } from './components/ui/toast'
 import Home from './pages/Home'
+import { useAi } from './store/ai'
 import { useFinny } from './store/useFinny'
 
 const Movimenti = lazy(() => import('./pages/Movimenti'))
@@ -13,9 +14,10 @@ const Abbonamenti = lazy(() => import('./pages/Abbonamenti'))
 const Budget = lazy(() => import('./pages/Budget'))
 const Importa = lazy(() => import('./pages/Importa'))
 const Collega = lazy(() => import('./pages/Collega'))
+const Chiedi = lazy(() => import('./pages/Chiedi'))
 const Impostazioni = lazy(() => import('./pages/Impostazioni'))
 
-const PAGES = { home: Home, movimenti: Movimenti, analisi: Analisi, abbonamenti: Abbonamenti, budget: Budget, importa: Importa, collega: Collega, impostazioni: Impostazioni }
+const PAGES = { home: Home, movimenti: Movimenti, analisi: Analisi, chiedi: Chiedi, abbonamenti: Abbonamenti, budget: Budget, importa: Importa, collega: Collega, impostazioni: Impostazioni }
 
 /** Brand intro: the mark draws itself, then lifts away. Short, and it never blocks content for long. */
 function Intro({ onDone }: { onDone: () => void }) {
@@ -57,6 +59,7 @@ export default function App() {
   })
   useEffect(() => {
     void load()
+    void useAi.getState().load()
   }, [load])
   useEffect(() => {
     const onHash = () => {

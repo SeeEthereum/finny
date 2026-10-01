@@ -7,7 +7,7 @@ import { money, monthLabel, percent, shiftMonth, WEEKDAY_SHORT } from './format'
 import type { Transaction } from './types'
 
 export type Tone = 'good' | 'warning' | 'critical' | 'info'
-export type View = 'home' | 'movimenti' | 'analisi' | 'abbonamenti' | 'budget' | 'importa' | 'collega' | 'impostazioni'
+export type View = 'home' | 'movimenti' | 'analisi' | 'chiedi' | 'abbonamenti' | 'budget' | 'importa' | 'collega' | 'impostazioni'
 
 export interface Insight {
   id: string

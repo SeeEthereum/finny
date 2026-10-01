@@ -1,5 +1,6 @@
 import { Copy, Database, Download, HardDrive, Sparkles, Trash2, Upload } from 'lucide-react'
 import { useRef, useState } from 'react'
+import { AiSetup } from '../components/AiSetup'
 import { useTheme } from '../components/Shell'
 import { PageHeader } from '../components/shared'
 import { toast } from '../components/ui/toast'
@@ -7,6 +8,7 @@ import { Button, Card, SectionTitle, Segmented } from '../components/ui/primitiv
 import { category } from '../lib/categories'
 import { shortDate, todayISO } from '../lib/format'
 import type { Snapshot } from '../lib/types'
+import { useAi } from '../store/ai'
 import { useFinny } from '../store/useFinny'
 
 export default function Impostazioni() {
@@ -68,7 +70,7 @@ export default function Impostazioni() {
           <div className="mt-4 flex items-start gap-3">
             <HardDrive className="mt-0.5 shrink-0 text-accent" size={20} />
             <p className="text-sm text-fg-2">
-              Movimenti, regole e budget sono salvati solo in questo browser, nel suo database locale (IndexedDB). Finny non ha un server e non invia i tuoi dati a nessuno. Se cancelli i dati del sito o cambi dispositivo, ti serve un backup.
+              Movimenti, regole e budget sono salvati solo in questo browser, nel suo database locale (IndexedDB). Finny non ha un server: i dati escono dal browser solo se attivi l'assistente AI, e solo quelli che servono a ogni risposta. Se cancelli i dati del sito o cambi dispositivo, ti serve un backup.
             </p>
           </div>
           <div className="mt-4 flex items-center gap-2 rounded-xl border border-line bg-bg-2 px-3 py-2 text-sm">
@@ -92,6 +94,12 @@ export default function Impostazioni() {
             />
           </div>
           <p className="mt-3 text-sm text-fg-2">Automatico segue il tema del dispositivo. Le animazioni si riducono da sole se hai attivato "Riduci movimento".</p>
+        </Card>
+
+        <Card className="p-5 sm:p-6 lg:col-span-2">
+          <SectionTitle eyebrow="Assistente AI" title="Chiedi a Finny" />
+          <p className="mt-2 mb-4 text-sm text-fg-2">Facoltativo e spento finché non lo attivi. Senza AI, Finny funziona per intero nel browser.</p>
+          <AiSetup />
         </Card>
 
         <Card className="p-5 sm:p-6">
@@ -207,8 +215,9 @@ export default function Impostazioni() {
                   variant="danger"
                   onClick={async () => {
                     await s.wipe()
+                    await useAi.getState().forget()
                     setConfirmWipe(false)
-                    toast('Tutti i dati sono stati cancellati')
+                    toast('Tutti i dati e la chiave AI sono stati cancellati')
                   }}
                 >
                   Sì, cancella tutto

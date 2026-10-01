@@ -2,7 +2,7 @@
 
 Web app per le finanze personali. Carichi l'estratto conto (CSV, Excel o PDF) e Finny lo legge **dentro il browser**: categorie di spesa, abbonamenti, budget, previsioni e consigli della "vocina", ognuno con la sua fonte.
 
-Non c'è un server: i movimenti restano nel database locale del browser (IndexedDB).
+Non c'è un server: i movimenti restano nel database locale del browser (IndexedDB). L'unica eccezione è l'assistente AI, facoltativo e spento di default.
 
 ## Avvio
 
@@ -32,7 +32,8 @@ npm run build      # build statica in dist/, pubblicabile su qualsiasi hosting
 | **Budget** | Budget mensili per categoria con anello di avanzamento, ritmo ideale del mese, proposte automatiche dalla media degli ultimi 3 mesi |
 | **Importa** | Drag & drop, rilevamento automatico delle colonne (modificabile), anteprima, deduplica sui reimport |
 | **Collega conto** | Spiega cosa richiede davvero l'open banking PSD2, con un diagramma e una simulazione |
-| **Impostazioni** | Tema, backup/ripristino JSON, conti, regole apprese, cancellazione dati |
+| **Chiedi** | Assistente AI facoltativo (OpenAI o modello locale) che risponde usando i tuoi numeri e mostra quali dati ha inviato |
+| **Impostazioni** | Tema, assistente AI, backup/ripristino JSON, conti, regole apprese, cancellazione dati |
 
 ### Formati supportati
 
@@ -63,6 +64,22 @@ Stack: Vite, React 19, TypeScript, Tailwind CSS 4, Motion, pdf.js, read-excel-fi
 - La palette dei grafici (verde acqua, rame, viola) è validata per daltonismo e contrasto su entrambe le superfici.
 - Ogni grafico ha una vista "Tabella" equivalente. Legenda sempre presente con due o più serie, tooltip al passaggio del mouse e da tastiera.
 - Animazioni: intro del marchio, transizioni tra pagine, numeri che contano, grafici che si disegnano, bordi che si illuminano sotto il puntatore, tilt 3D, pulsanti magnetici, palette comandi `⌘K`. Tutto si riduce da solo con "Riduci movimento" attivo nel sistema.
+
+## Assistente AI (facoltativo)
+
+La pagina **Chiedi** risponde a domande libere sui tuoi movimenti ("quanto spendo per mangiare fuori?", "fammi il report del mese", "dove posso risparmiare 200 €?"). In **Movimenti**, inoltre, un pulsante propone una categoria per gli esercenti finiti in "Altro".
+
+Come funziona:
+- Usa una chiave API di OpenAI, o di un servizio compatibile, che inserisci in *Impostazioni → Assistente AI*. La chiave resta nel database locale del browser: non è nel codice, non va nel backup, non passa da Netlify. **Non metterla in una variabile `VITE_*`**: finirebbe nel JavaScript pubblico del sito.
+- Il modello non riceve la lista dei movimenti. Chiede a Finny i dati tramite funzioni che girano nel browser (`src/lib/ai/tools.ts`): riepilogo mensile, spese per categoria o esercente, movimenti filtrati (max 50), ricorrenti, budget, saldo. Causali originali, IBAN e nomi dei conti non escono mai. Sotto ogni risposta c'è l'elenco esatto dei dati inviati.
+- Per ricategorizzare vengono inviati solo i nomi degli esercenti e se si tratta di entrata o uscita.
+- Opzione "Solo le categorie": al posto dei nomi degli esercenti viene inviata la categoria.
+- In alternativa si può usare un modello locale compatibile con l'API OpenAI (per esempio Ollama su `http://localhost:11434/v1`): così i dati non escono dal computer.
+- La CSP consente connessioni solo verso il sito stesso, `api.openai.com` e `localhost:11434`.
+
+Privacy: la connessione è cifrata (HTTPS), ma il fornitore del modello legge i dati in chiaro per elaborarli. Secondo OpenAI, i dati inviati via API non sono usati per l'addestramento e restano nei log fino a 30 giorni per il controllo degli abusi ([Data controls in the OpenAI platform](https://developers.openai.com/api/docs/guides/your-data)).
+
+L'assistente non funziona nell'anteprima su claude.ai, dove le chiamate verso l'esterno sono bloccate; funziona su Netlify o in locale.
 
 ## Collegare il conto: stato attuale
 

@@ -1,5 +1,5 @@
 import {
-  ChartPie, Command, FileUp, Home, Landmark, ListOrdered, Monitor, Moon, Repeat, Search, Settings, Sun, Target,
+  ChartPie, Command, FileUp, Home, Landmark, ListOrdered, MessageCircle, Monitor, Moon, Repeat, Search, Settings, Sun, Target,
   type LucideIcon,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
@@ -15,8 +15,9 @@ export const NAV: { id: View; label: string; icon: LucideIcon; mobile?: boolean 
   { id: 'home', label: 'Panoramica', icon: Home, mobile: true },
   { id: 'movimenti', label: 'Movimenti', icon: ListOrdered, mobile: true },
   { id: 'analisi', label: 'Analisi', icon: ChartPie, mobile: true },
+  { id: 'chiedi', label: 'Chiedi', icon: MessageCircle, mobile: true },
   { id: 'abbonamenti', label: 'Ricorrenti', icon: Repeat },
-  { id: 'budget', label: 'Budget', icon: Target, mobile: true },
+  { id: 'budget', label: 'Budget', icon: Target },
   { id: 'importa', label: 'Importa', icon: FileUp, mobile: true },
   { id: 'collega', label: 'Collega conto', icon: Landmark },
   { id: 'impostazioni', label: 'Impostazioni', icon: Settings },
@@ -290,7 +291,7 @@ export function Shell({ children }: { children: ReactNode }) {
         <MobileTop onSearch={() => setPalette(true)} />
         <main className="mx-auto w-full max-w-[1180px] px-4 pt-6 pb-[calc(110px+env(safe-area-inset-bottom,0px))] sm:px-6 lg:px-10 lg:pt-10 lg:pb-16">{children}</main>
         <footer className="mx-auto hidden max-w-[1180px] items-center gap-2 px-10 pb-8 text-xs text-muted lg:flex">
-          <Mark size={16} animate={false} /> Finny by vocina · i tuoi dati restano in questo browser
+          <Mark size={16} animate={false} /> Finny by vocina · i tuoi dati restano in questo browser, salvo ciò che chiedi all'assistente AI se lo attivi
         </footer>
       </div>
       <MobileBar />
