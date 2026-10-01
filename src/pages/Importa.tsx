@@ -1,6 +1,7 @@
 import { ArrowLeftRight, Check, Copy, FileSearch, FileSpreadsheet, FileText, FileUp, KeyRound, Loader2, Lock, RotateCcw, ShieldCheck, TriangleAlert } from 'lucide-react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useCallback, useMemo, useRef, useState } from 'react'
+import { AiCategorize } from '../components/AiCategorize'
 import { Confetti } from '../components/Confetti'
 import { PageHeader } from '../components/shared'
 import { toast } from '../components/ui/toast'
@@ -743,6 +744,9 @@ function Done({ stage, next, onNext }: { stage: Extract<Stage, { kind: 'done' }>
         {stage.outcome.duplicates > 0 ? `${stage.outcome.duplicates} erano già presenti e li ho saltati. ` : ''}
         Ho assegnato le categorie in automatico: se qualcuna è sbagliata, correggila da Movimenti e Finny se lo ricorderà.
       </p>
+      <div className="mt-4">
+        <AiCategorize auto />
+      </div>
       <div className="mt-6 flex flex-wrap justify-center gap-2">
         {next ? (
           <Button onClick={onNext}>Prosegui con {next.name}</Button>

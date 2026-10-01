@@ -1,6 +1,6 @@
 import { CATEGORIES } from '../categories'
 import type { CategoryId, Transaction } from '../types'
-import { AiError, chat, type AiConfig, type ChatMessage } from './client'
+import { AiError, chat, parseJson, type AiConfig, type ChatMessage } from './client'
 import { contextPrimer, runTool, TOOLS, type ToolContext } from './tools'
 
 /** One entry per piece of data that left the device during an answer */
@@ -81,7 +81,19 @@ export interface CategoryProposal {
 export async function proposeCategories(cfg: AiConfig, txs: Transaction[], signal?: AbortSignal): Promise<CategoryProposal[]> {
   const seen = new Map<string, 'entrata' | 'uscita'>()
   for (const t of txs) if (t.category === 'altro' || t.category === 'entrate') seen.set(t.merchant, t.amount > 0 ? 'entrata' : 'uscita')
-  const items = [...seen.entries()].slice(0, 80).map(([esercente, tipo]) => ({ esercente, tipo }))
+  const all = [...seen.entries()].map(([esercente, tipo]) => ({ esercente, tipo }))
+  // batches keep each request small enough for any model; they run one after the other
+  const out: CategoryProposal[] = []
+  for (let i = 0; i < all.length; i += 60) out.push(...(await proposeBatch(cfg, all.slice(i, i + 60), seen, signal)))
+  return out
+}
+
+async function proposeBatch(
+  cfg: AiConfig,
+  items: { esercente: string; tipo: 'entrata' | 'uscita' }[],
+  seen: Map<string, 'entrata' | 'uscita'>,
+  signal?: AbortSignal,
+): Promise<CategoryProposal[]> {
   if (!items.length) return []
   const ids = CATEGORIES.map((c) => c.id)
   const res = await chat(
@@ -120,13 +132,15 @@ export async function proposeCategories(cfg: AiConfig, txs: Transaction[], signa
       },
     },
   )
-  let parsed: { risultati?: { esercente: string; categoria: string; sicurezza: string }[] }
-  try {
-    parsed = JSON.parse(res.content ?? '{}')
-  } catch {
-    throw new AiError('format', 'Il modello non ha restituito un elenco leggibile.')
-  }
+  const parsed = parseJson<{ risultati?: { esercente: string; categoria: string; sicurezza: string }[] }>(res.content)
+  const INCOME: CategoryId[] = ['stipendio', 'entrate', 'rimborsi', 'trasferimenti', 'investimenti']
   return (parsed.risultati ?? [])
     .filter((r) => seen.has(r.esercente) && ids.includes(r.categoria as CategoryId) && r.categoria !== 'altro')
+    // the model's word isn't enough: money in can't become a spending category, and vice versa
+    .filter((r) => {
+      const incoming = seen.get(r.esercente) === 'entrata'
+      const incomeCat = INCOME.includes(r.categoria as CategoryId) && r.categoria !== 'trasferimenti' && r.categoria !== 'investimenti'
+      return incoming ? INCOME.includes(r.categoria as CategoryId) : !incomeCat
+    })
     .map((r) => ({ merchant: r.esercente, category: r.categoria as CategoryId, confidence: (r.sicurezza as CategoryProposal['confidence']) ?? 'media' }))
 }

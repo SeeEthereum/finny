@@ -6,6 +6,8 @@ import { ChartCard, Legend } from '../components/charts/kit'
 import { CategoryBars, Empty, PageHeader, TxRow } from '../components/shared'
 import { AnimatedNumber, Button, Card, CategoryIcon, Delta, SectionTitle, stagger } from '../components/ui/primitives'
 import { VocinaCarousel } from '../components/Vocina'
+import { AiBrief } from '../components/AiBrief'
+import { useAiReady } from '../store/ai'
 import { categoryTotals, inMonth } from '../lib/analytics'
 import { daysBetween, money, monthLabel, percent, shiftMonth, shortDate, todayISO } from '../lib/format'
 import { useDerived } from '../store/derived'
@@ -22,6 +24,7 @@ export default function Home() {
   const isDemo = useFinny((s) => s.isDemo)
   const go = useFinny((s) => s.go)
   const { cur, stats, subs, insights } = useDerived()
+  const aiReady = useAiReady()
 
   const thisM = stats[stats.length - 1]
   const prevM = stats[stats.length - 2]
@@ -127,7 +130,7 @@ export default function Home() {
         </motion.div>
 
         <motion.div variants={stagger.item} className="lg:col-span-12">
-          <VocinaCarousel insights={insights} />
+          {aiReady && !isDemo ? <AiBrief /> : <VocinaCarousel insights={insights} />}
         </motion.div>
 
         <motion.div variants={stagger.item} className="lg:col-span-8">

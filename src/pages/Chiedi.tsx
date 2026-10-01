@@ -10,6 +10,7 @@ import { TOOL_LABELS } from '../lib/ai/tools'
 import { monthLabel } from '../lib/format'
 import { aiConfig, useAi, useAiReady } from '../store/ai'
 import { useDerived } from '../store/derived'
+import { useUi } from '../store/ui'
 import { useFinny } from '../store/useFinny'
 
 /** Bold, bullet lists and paragraphs, rendered as React nodes (no HTML injection) */
@@ -103,6 +104,16 @@ export default function Chiedi() {
   useEffect(() => {
     end.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
   }, [turns, busy])
+
+  // a question handed over from the dashboard brief
+  const pending = useUi((s) => s.question)
+  useEffect(() => {
+    if (!ready || !pending) return
+    useUi.getState().setQuestion('')
+    void send(pending)
+    // send is recreated every render; the pending question is what matters
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, pending])
 
   const send = async (q: string) => {
     const question = q.trim()

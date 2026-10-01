@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { demoSnapshot } from '../demo'
 import { ask, proposeCategories } from './agent'
-import { listModels } from './client'
+import { generateBrief, briefFingerprint } from './brief'
+import { listModels, parseJson } from './client'
 import { runTool, type ToolContext } from './tools'
 
 const demo = demoSnapshot()
@@ -91,5 +92,81 @@ describe('agent loop', () => {
       }),
     )
     expect(await proposeCategories(cfg, txs)).toEqual([{ merchant: 'Ferramenta Rossi', category: 'casa', confidence: 'alta' }])
+  })
+})
+
+describe('dashboard brief', () => {
+  const answer = {
+    titolo: 'Settembre sotto controllo',
+    sintesi: 'Hai speso meno del solito.',
+    punti: [
+      { tono: 'warning', titolo: 'Delivery in crescita', testo: 'Ad agosto 181 €.', risparmio_mensile: 60, azione: 'movimenti' },
+      { tono: 'strano', titolo: 'Tono sconosciuto', testo: 'x', risparmio_mensile: -5, azione: 'inventata' },
+    ],
+    domanda: 'Come riduco il delivery?',
+  }
+
+  it('sends computed figures only and maps the answer', async () => {
+    let sent = ''
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_u: string, init: RequestInit) => {
+        sent = init.body as string
+        return reply({ choices: [{ message: { content: JSON.stringify(answer) } }] })
+      }),
+    )
+    const { brief, shared } = await generateBrief(cfg, ctx)
+    expect(JSON.parse(sent).response_format.type).toBe('json_schema')
+    expect(sent).not.toMatch(/PAGAMENTO POS|ADDEBITO SDD/)
+    expect(shared.map((x) => x.tool)).toContain('segnali')
+    expect(brief.title).toBe('Settembre sotto controllo')
+    expect(brief.points[0]).toEqual({ tone: 'warning', title: 'Delivery in crescita', text: 'Ad agosto 181 €.', monthlySaving: 60, action: 'movimenti' })
+    // unknown values are neutralised instead of breaking the card
+    expect(brief.points[1]).toMatchObject({ tone: 'info', monthlySaving: null, action: null })
+  })
+
+  it('falls back to plain JSON when the model has no structured output', async () => {
+    const bodies: Record<string, unknown>[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_u: string, init: RequestInit) => {
+        const body = JSON.parse(init.body as string)
+        bodies.push(body)
+        if (body.response_format) return reply({ error: { message: "Invalid parameter: 'response_format' of type 'json_schema' is not supported with this model." } }, 400)
+        return reply({ choices: [{ message: { content: 'Ecco:\n```json\n' + JSON.stringify(answer) + '\n```' } }] })
+      }),
+    )
+    const { brief } = await generateBrief(cfg, ctx)
+    expect(bodies).toHaveLength(2)
+    expect(bodies[1].response_format).toBeUndefined()
+    expect(brief.question).toBe('Come riduco il delivery?')
+  })
+
+  it('fingerprint changes when the data changes, not otherwise', () => {
+    const a = briefFingerprint(demo.transactions, 'x')
+    expect(briefFingerprint(demo.transactions, 'x')).toBe(a)
+    expect(briefFingerprint(demo.transactions.slice(1), 'x')).not.toBe(a)
+  })
+
+  it('parses JSON wrapped in prose', () => {
+    expect(parseJson<{ a: number }>('Risposta: {"a": 1} fine')).toEqual({ a: 1 })
+    expect(() => parseJson('niente json')).toThrow('formato')
+  })
+})
+
+describe('category proposals sanity', () => {
+  it('drops proposals that contradict the direction of the money', async () => {
+    const base = demo.transactions[0]
+    const txs = [
+      { ...base, id: 'a', merchant: 'Mario Verdi', category: 'entrate' as const, amount: 35 },
+      { ...base, id: 'b', merchant: 'Bottega Rossi', category: 'altro' as const, amount: -12 },
+      { ...base, id: 'c', merchant: 'Ditta Neri', category: 'altro' as const, amount: -40 },
+    ]
+    vi.stubGlobal('fetch', vi.fn(async () => reply({ choices: [{ message: { content: JSON.stringify({ risultati: [
+      { esercente: 'Mario Verdi', categoria: 'shopping', sicurezza: 'alta' },
+      { esercente: 'Bottega Rossi', categoria: 'spesa', sicurezza: 'alta' },
+      { esercente: 'Ditta Neri', categoria: 'stipendio', sicurezza: 'alta' },
+    ] }) } }] })))
+    expect(await proposeCategories(cfg, txs)).toEqual([{ merchant: 'Bottega Rossi', category: 'spesa', confidence: 'alta' }])
   })
 })

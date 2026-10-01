@@ -123,8 +123,32 @@ export async function chat(
   const body: Record<string, unknown> = { model: cfg.model, messages }
   if (opts.tools?.length) body.tools = opts.tools
   if (opts.schema) body.response_format = { type: 'json_schema', json_schema: { name: opts.schema.name, schema: opts.schema.schema, strict: true } }
-  const data = await call<Completion>(cfg, '/chat/completions', body, opts.signal)
+  let data: Completion
+  try {
+    data = await call<Completion>(cfg, '/chat/completions', body, opts.signal)
+  } catch (e) {
+    // some models don't support structured output: ask for the same JSON in plain text instead
+    if (!(opts.schema && e instanceof AiError && e.kind === 'model' && /response_format|json_schema|schema|structured/i.test(e.message))) throw e
+    delete body.response_format
+    body.messages = [
+      ...messages,
+      { role: 'system', content: `Rispondi solo con un oggetto JSON valido, senza testo prima o dopo, conforme a questo JSON Schema: ${JSON.stringify(opts.schema.schema)}` },
+    ]
+    data = await call<Completion>(cfg, '/chat/completions', body, opts.signal)
+  }
   const msg = data.choices?.[0]?.message
   if (!msg) throw new AiError('format', 'Risposta del modello vuota o in un formato inatteso.')
   return { content: msg.content ?? null, toolCalls: msg.tool_calls ?? [] }
+}
+
+/** Parses a JSON answer, tolerating a ```json fence or text around the object */
+export function parseJson<T>(content: string | null): T {
+  const text = (content ?? '').trim()
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/)
+  const candidate = fenced ? fenced[1] : text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1)
+  try {
+    return JSON.parse(candidate) as T
+  } catch {
+    throw new AiError('format', 'Il modello ha risposto in un formato che non riesco a leggere. Riprova o scegli un altro modello.')
+  }
 }

@@ -67,6 +67,8 @@ Stack: Vite, React 19, TypeScript, Tailwind CSS 4, Motion, pdf.js, read-excel-fi
 
 ## Assistente AI (facoltativo)
 
+Sulla **Panoramica**, con l'AI attiva, la vocina scrive il punto del mese: una sintesi e da 3 a 5 consigli con il risparmio stimato e il collegamento alla sezione giusta. I numeri della dashboard restano calcolati da Finny: il modello riceve solo cifre già calcolate (riepilogo mensile, categorie, esercenti principali, ricorrenti, budget, saldo, segnali) e le interpreta. Il punto si rigenera solo quando cambiano i dati o premi Aggiorna, ed è salvato nel browser. Dopo ogni import, l'AI propone da sola le categorie per gli esercenti in "Altro"; le proposte incoerenti con il verso del movimento vengono scartate dal codice.
+
 La pagina **Chiedi** risponde a domande libere sui tuoi movimenti ("quanto spendo per mangiare fuori?", "fammi il report del mese", "dove posso risparmiare 200 €?"). In **Movimenti**, inoltre, un pulsante propone una categoria per gli esercenti finiti in "Altro".
 
 Dove sta la chiave (scegli in *Impostazioni → Assistente AI*):

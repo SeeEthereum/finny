@@ -1,6 +1,6 @@
 import { Loader2, Wand2 } from 'lucide-react'
 import { motion } from 'motion/react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { proposeCategories, type CategoryProposal } from '../lib/ai/agent'
 import { category } from '../lib/categories'
 import { aiConfig, useAi, useAiReady } from '../store/ai'
@@ -10,7 +10,7 @@ import { toast } from './ui/toast'
 import { Button, CategoryIcon, cx } from './ui/primitives'
 
 /** Lets the model suggest categories for merchants filed under "Altro"; the user reviews before anything changes */
-export function AiCategorize() {
+export function AiCategorize({ auto = false }: { auto?: boolean }) {
   const ready = useAiReady()
   const ai = useAi()
   const txs = useFinny((s) => s.transactions)
@@ -21,6 +21,15 @@ export function AiCategorize() {
   const [picked, setPicked] = useState<Set<string>>(new Set())
 
   const pending = useMemo(() => new Set(txs.filter((t) => t.category === 'altro' || t.category === 'entrate').map((t) => t.merchant)).size, [txs])
+  const started = useRef(false)
+  // right after an import: ask straight away instead of waiting for a click
+  useEffect(() => {
+    if (!auto || !ready || !pending || started.current) return
+    started.current = true
+    void run()
+    // run only once per mount
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [auto, ready, pending])
   if (!ready || !pending) return null
 
   const run = async () => {

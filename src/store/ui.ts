@@ -7,9 +7,14 @@ export const useUi = create<{
   category: CategoryId | 'all'
   setSearch: (s: string) => void
   setCategory: (c: CategoryId | 'all') => void
+  /** a question to send as soon as Chiedi opens (from the dashboard brief) */
+  question: string
+  setQuestion: (q: string) => void
 }>((set) => ({
   search: '',
   category: 'all',
+  question: '',
+  setQuestion: (question) => set({ question }),
   setSearch: (search) => set({ search }),
   setCategory: (category) => set({ category }),
 }))
