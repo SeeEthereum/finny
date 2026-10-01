@@ -252,7 +252,27 @@ describe('Revolut-style statement', () => {
     ]))
     // importing the same file again adds nothing
     const again = useFinny.getState().importDrafts({ accountId: out.accountId, accountName: 'Test', institution: 'Revolut', source: 'pdf', drafts: main, holder: res.holder })
-    expect(again).toMatchObject({ added: 0, duplicates: 5 })
+    expect(again).toMatchObject({ added: 0, duplicates: 5, replaced: 0 })
+  })
+
+  it('replaces a period imported badly before instead of adding to it', async () => {
+    const { useFinny } = await import('../store/useFinny')
+    const main = res.drafts.filter((d) => d.section === 'Transazioni del conto')
+    // what an older, broken import left behind: wrong signs, one row outside the period
+    const bad = main.map((d) => ({ ...d, amount: -Math.abs(d.amount), description: `${d.description} ID transazione: x` }))
+    const first = useFinny.getState().importDrafts({ accountName: 'Vecchio', institution: '', source: 'pdf', drafts: [...bad, { ...bad[0], key: 'old', date: '2025-12-31' }] })
+    const fixed = useFinny.getState().importDrafts({
+      accountId: first.accountId, accountName: 'Vecchio', institution: 'Revolut', source: 'pdf', drafts: main, holder: res.holder,
+      balance: res.latestBalance, replaceRange: { from: '2026-01-04', to: '2026-01-06' },
+    })
+    expect(fixed).toMatchObject({ added: 5, duplicates: 0, replaced: 5 })
+    const state = useFinny.getState()
+    const mine = state.transactions.filter((t) => t.accountId === first.accountId)
+    expect(mine).toHaveLength(6) // 5 correct rows + the one outside the replaced period
+    expect(mine.filter((t) => t.date >= '2026-01-04').reduce((a, t) => a + t.amount, 0)).toBeCloseTo(1500 - 150 - 20 - 13.99 - 13.99, 2)
+    const acc = state.accounts.find((a) => a.id === first.accountId)!
+    expect(acc.balance).toEqual({ amount: 1302.23, date: '2026-01-06' })
+    expect(acc.institution).toBe('Revolut')
   })
 })
 

@@ -18,11 +18,15 @@ export interface ImportRequest {
   source: TxSource
   drafts: DraftTx[]
   balance?: { amount: number; date: string }
+  /** the statement is the truth for its period: drop what the account already has between these dates */
+  replaceRange?: { from: string; to: string }
 }
 
 export interface ImportOutcome {
   added: number
   duplicates: number
+  /** movements of the same account and period removed because the new statement replaces them */
+  replaced: number
   accountId: string
 }
 
@@ -136,6 +140,14 @@ export const useFinny = create<State>((setState, getState) => {
           createdAt: todayISO(),
         }
       }
+      if (!account.institution && req.institution.trim()) account = { ...account, institution: req.institution.trim() }
+      let replaced = 0
+      if (req.replaceRange && base.accounts.some((a) => a.id === account!.id)) {
+        const { from, to } = req.replaceRange
+        const keep = base.transactions.filter((t) => t.accountId !== account!.id || t.date < from || t.date > to)
+        replaced = base.transactions.length - keep.length
+        base.transactions = keep
+      }
       if (req.balance && (!account.balance || req.balance.date >= account.balance.date)) {
         account = { ...account, balance: req.balance }
       }
@@ -181,7 +193,7 @@ export const useFinny = create<State>((setState, getState) => {
       const accounts = [...base.accounts.filter((a) => a.id !== account!.id), account]
       const transactions = [...added, ...base.transactions].sort((a, b) => b.date.localeCompare(a.date))
       update({ transactions, accounts, budgets: base.budgets, isDemo: false })
-      return { added: added.length, duplicates, accountId: account.id }
+      return { added: added.length, duplicates, replaced, accountId: account.id }
     },
 
     setCategory: (id, cat, applyToSimilar) => {

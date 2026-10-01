@@ -35,6 +35,13 @@ export default function Home() {
   const upcoming = subs.filter((s) => daysBetween(today, s.next) <= 30).sort((a, b) => a.next.localeCompare(b.next)).slice(0, 5)
   const netSeries = stats.map((s) => s.net)
   const cumulative = netSeries.reduce<number[]>((acc, v) => [...acc, (acc[acc.length - 1] ?? 0) + v], [])
+  // money moved in from your other accounts or savings over the same months: it explains
+  // how the balance can stay positive while spending exceeds income
+  const fromOwn = useMemo(() => {
+    const from = `${stats[0]?.key ?? cur}-01`
+    return txs.filter((t) => t.date >= from && (t.category === 'trasferimenti' || t.category === 'investimenti')).reduce((a, t) => a + t.amount, 0)
+  }, [txs, stats, cur])
+  const gap = cumulative[cumulative.length - 1] ?? 0
 
   if (!txs.length) {
     return (
@@ -76,14 +83,14 @@ export default function Home() {
         <motion.div variants={stagger.item} className="lg:col-span-7">
           <Card tilt className="h-full overflow-hidden p-6 sm:p-7">
             <div className="pointer-events-none absolute -top-24 -right-24 size-72 rounded-full bg-accent/10 blur-3xl" />
-            <div className="eyebrow">{knownBalance.length ? 'Saldo totale' : 'Risparmio netto, 12 mesi'}</div>
+            <div className="eyebrow">{knownBalance.length ? 'Saldo totale' : `Entrate meno uscite da ${monthLabel(stats[0]?.key ?? cur)}`}</div>
             <div className="mt-3 text-[44px] leading-none font-semibold tracking-[-0.03em] text-fg sm:text-[60px]">
               <AnimatedNumber value={knownBalance.length ? balance : cumulative[cumulative.length - 1] ?? 0} duration={1.6} />
             </div>
             <div className="mt-3 text-sm text-fg-2">
               {knownBalance.length
                 ? `${knownBalance.length === 1 ? '1 conto' : `${knownBalance.length} conti`} · aggiornato al ${shortDate(knownBalance.map((a) => a.balance!.date).sort().pop()!)}`
-                : 'Il tuo estratto non riporta il saldo: mostro quanto hai messo da parte.'}
+                : 'Il tuo estratto non riporta il saldo: mostro la differenza tra entrate e uscite, che non è il saldo del conto.'}
             </div>
             <div className="mt-6 flex flex-wrap gap-2">
               {accounts.map((a) => (
@@ -96,10 +103,15 @@ export default function Home() {
             </div>
             <div className="mt-6">
               <div className="mb-1 flex items-center justify-between text-xs text-muted">
-                <span>Risparmio cumulato</span>
+                <span>Entrate meno uscite da {monthLabel(stats[0]?.key ?? cur, true)}</span>
                 <span className="tabular-nums">{money(cumulative[cumulative.length - 1] ?? 0, { round: true, sign: true })}</span>
               </div>
               <Sparkline values={cumulative} color="var(--accent)" height={56} />
+              {gap < 0 && fromOwn > 0 && (
+                <p className="mt-2 text-xs text-fg-2">
+                  Da {monthLabel(stats[0]?.key ?? cur, true)} hai speso {money(-gap, { round: true })} più di quanto è entrato. Il conto non è in rosso perché nello stesso periodo sono arrivati {money(fromOwn, { round: true })} netti dai tuoi altri conti e risparmi.
+                </p>
+              )}
             </div>
           </Card>
         </motion.div>

@@ -11,7 +11,7 @@ import { PdfPasswordError, readPdf, type PdfResult } from '../lib/parse/pdf'
 import { fileKind, ImportError, readCsv, readXlsx, type FileKind } from '../lib/parse/readers'
 import { detectTable, mappingProblems, toDrafts, type DetectedTable, type DraftTx, type Mapping } from '../lib/parse/table'
 import { cellText } from '../lib/parse/values'
-import type { TxSource } from '../lib/types'
+import type { Account, TxSource } from '../lib/types'
 import { useFinny, type ImportOutcome } from '../store/useFinny'
 
 type Stage =
@@ -356,62 +356,121 @@ function Guide() {
   )
 }
 
-function AccountFields({ name, setName, bank, setBank }: { name: string; setName: (v: string) => void; bank: string; setBank: (v: string) => void }) {
-  const accounts = useFinny((s) => s.accounts)
-  const isDemo = useFinny((s) => s.isDemo)
-  const real = isDemo ? [] : accounts
+interface Overlap {
+  account: Account
+  count: number
+}
+
+type Picker = ReturnType<typeof useCommit>['picker']
+
+/** Where the movements go: an existing account (with how much of this period it already holds) or a new one */
+function AccountPicker({ picker }: { picker: Picker }) {
+  const { overlaps, targetId, setTarget, replace, setReplace, targetOverlap, range, name, setName, bank, setBank } = picker
+  const target = overlaps.find((o) => o.account.id === targetId)
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      <label className="flex flex-col gap-1 text-sm text-fg-2">
-        Nome del conto
-        <input
-          id="acc-name"
-          list="acc-list"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Conto principale"
-          className="h-11 rounded-xl border border-line bg-bg-2 px-3 text-fg outline-none placeholder:text-muted focus:border-accent/60"
-        />
-        <datalist id="acc-list">
-          {real.map((a) => (
-            <option key={a.id} value={a.name} />
-          ))}
-        </datalist>
+    <div className="space-y-2">
+      <div className="text-sm text-fg-2">Importa in</div>
+      {overlaps.map((o) => (
+        <label key={o.account.id} className={cx('flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 text-sm transition-colors', targetId === o.account.id ? 'border-accent/50 bg-accent-soft' : 'border-line')}>
+          <input type="radio" name="target" checked={targetId === o.account.id} onChange={() => setTarget(o.account.id)} className="accent-[var(--accent)]" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-fg">{o.account.name}</span>
+            <span className="text-xs text-muted">{o.count ? `${o.count} movimenti già presenti in questo periodo` : 'nessun movimento in questo periodo'}</span>
+          </span>
+        </label>
+      ))}
+      <label className={cx('flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 text-sm transition-colors', targetId === 'new' ? 'border-accent/50 bg-accent-soft' : 'border-line')}>
+        <input type="radio" name="target" checked={targetId === 'new'} onChange={() => setTarget('new')} className="accent-[var(--accent)]" />
+        <span className="text-fg">Nuovo conto</span>
       </label>
-      <label className="flex flex-col gap-1 text-sm text-fg-2">
-        Banca
-        <input
-          id="acc-bank"
-          value={bank}
-          onChange={(e) => setBank(e.target.value)}
-          placeholder="Es. Intesa Sanpaolo"
-          className="h-11 rounded-xl border border-line bg-bg-2 px-3 text-fg outline-none placeholder:text-muted focus:border-accent/60"
-        />
-      </label>
+      {targetId === 'new' && (
+        <div className="grid gap-3 pt-1 sm:grid-cols-2">
+          <label className="flex flex-col gap-1 text-sm text-fg-2">
+            Nome del conto
+            <input
+              id="acc-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={bank ? `Conto ${bank}` : 'Conto principale'}
+              className="h-11 rounded-xl border border-line bg-bg-2 px-3 text-fg outline-none placeholder:text-muted focus:border-accent/60"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-fg-2">
+            Banca
+            <input
+              id="acc-bank"
+              value={bank}
+              onChange={(e) => setBank(e.target.value)}
+              placeholder="Es. Intesa Sanpaolo"
+              className="h-11 rounded-xl border border-line bg-bg-2 px-3 text-fg outline-none placeholder:text-muted focus:border-accent/60"
+            />
+          </label>
+        </div>
+      )}
+      {target && targetOverlap > 0 && (
+        <label className={cx('mt-1 flex cursor-pointer items-start gap-3 rounded-xl border p-3 text-sm', replace ? 'border-good/40 bg-good/10' : 'border-warning/40 bg-warning/10')}>
+          <input id="replace" type="checkbox" checked={replace} onChange={(e) => setReplace(e.target.checked)} className="mt-0.5 size-4 accent-[var(--accent)]" />
+          <span className="text-fg">
+            Sostituisci i {targetOverlap} movimenti di {target.account.name} dal {shortDate(range.from)} al {shortDate(range.to)} <span className="text-muted">(consigliato)</span>
+            <span className="mt-1 block text-xs text-fg-2">
+              {replace
+                ? "L'estratto conto fa fede per il suo periodo: i movimenti già presenti, anche quelli importati male in passato, vengono sostituiti. Le regole di categoria restano."
+                : 'Verranno aggiunti solo i movimenti che non risultano già presenti. Se i dati esistenti sono sbagliati, resteranno.'}
+            </span>
+          </span>
+        </label>
+      )}
     </div>
   )
 }
 
-function useCommit(source: TxSource, fileName: string, onDone: (name: string, o: ImportOutcome) => void, detectedBank?: string) {
+function useCommit(source: TxSource, fileName: string, onDone: (name: string, o: ImportOutcome) => void, drafts: DraftTx[], detectedBank?: string) {
   const importDrafts = useFinny((s) => s.importDrafts)
   const accounts = useFinny((s) => s.accounts)
+  const transactions = useFinny((s) => s.transactions)
   const isDemo = useFinny((s) => s.isDemo)
   const [name, setName] = useState('')
   const [bank, setBank] = useState(detectedBank || guessName(fileName))
-  const commit = (drafts: DraftTx[], balance?: { amount: number; date: string }, holder?: string) => {
-    const existing = isDemo ? undefined : accounts.find((a) => a.name.toLowerCase() === (name.trim() || 'conto principale').toLowerCase())
+  const [chosen, setTarget] = useState<string | null>(null)
+  const [replace, setReplace] = useState(true)
+
+  const range = useMemo(() => {
+    let from = '9999-12-31'
+    let to = ''
+    for (const d of drafts) {
+      if (d.date < from) from = d.date
+      if (d.date > to) to = d.date
+    }
+    return { from, to }
+  }, [drafts])
+
+  const overlaps: Overlap[] = useMemo(() => {
+    if (isDemo) return []
+    return accounts
+      .map((account) => ({ account, count: transactions.filter((t) => t.accountId === account.id && t.date >= range.from && t.date <= range.to).length }))
+      .sort((a, b) => b.count - a.count)
+  }, [accounts, transactions, range, isDemo])
+
+  // the same statement imported again lands where most of its period already is
+  const suggested = overlaps[0] && overlaps[0].count >= Math.max(5, drafts.length * 0.3) ? overlaps[0].account.id : 'new'
+  const targetId = chosen ?? suggested
+  const targetOverlap = overlaps.find((o) => o.account.id === targetId)?.count ?? 0
+
+  const commit = (ds: DraftTx[], balance?: { amount: number; date: string }, holder?: string) => {
+    const existing = targetId === 'new' ? undefined : accounts.find((a) => a.id === targetId)
     const outcome = importDrafts({
       accountId: existing?.id,
-      accountName: name.trim() || (bank ? `Conto ${bank}` : 'Conto principale'),
+      accountName: existing?.name ?? (name.trim() || (bank ? `Conto ${bank}` : 'Conto principale')),
       institution: bank,
       source,
-      drafts,
+      drafts: ds,
       balance,
       holder,
+      replaceRange: existing && replace && targetOverlap > 0 ? range : undefined,
     })
     onDone(fileName, outcome)
   }
-  return { name, setName, bank, setBank, commit }
+  return { commit, picker: { overlaps, targetId, setTarget, replace, setReplace, targetOverlap, range, name, setName, bank, setBank } }
 }
 
 const FIELDS: { key: keyof Mapping; label: string; multi?: boolean }[] = [
@@ -435,13 +494,13 @@ function TableReview({
   const [mapping, setMapping] = useState<Mapping>(stage.table.mapping)
   const [invert, setInvert] = useState(false)
   const [dateOrder, setDateOrder] = useState(stage.table.dateOrder)
-  const { name, setName, bank, setBank, commit } = useCommit(stage.fileKind, stage.name, onDone)
   const problems = mappingProblems(mapping)
   const result = useMemo(
     () => (problems.length ? null : toDrafts({ rows: stage.table.rows, mapping, dateOrder }, { invertSign: invert })),
     [stage.table.rows, mapping, dateOrder, invert, problems.length],
   )
   const headers = stage.table.headers
+  const { commit, picker } = useCommit(stage.fileKind, stage.name, onDone, result?.drafts ?? [])
 
   const setField = (key: keyof Mapping, value: string) => {
     setMapping((m) => {
@@ -507,7 +566,7 @@ function TableReview({
           </label>
         </div>
         <div className="mt-5">
-          <AccountFields name={name} setName={setName} bank={bank} setBank={setBank} />
+          <AccountPicker picker={picker} />
         </div>
       </Card>
 
@@ -632,7 +691,7 @@ function PdfReview({
     const inc = drafts.filter((d) => d.amount > 0).reduce((a, d) => a + d.amount, 0)
     return { out, inc }
   }, [drafts])
-  const { name, setName, bank, setBank, commit } = useCommit('pdf', stage.name, onDone, stage.result.institution)
+  const { commit, picker } = useCommit('pdf', stage.name, onDone, drafts, stage.result.institution)
   const flip = (key: string) => setDrafts((ds) => ds.map((d) => (d.key === key ? { ...d, amount: -d.amount } : d)))
   const note = {
     columns: { tone: 'good', text: 'Ho riconosciuto le colonne Dare/Avere: il segno dei movimenti dovrebbe essere corretto.' },
@@ -696,7 +755,7 @@ function PdfReview({
           <RotateCcw size={15} /> Inverti tutti i segni
         </Button>
         <div className="mt-5">
-          <AccountFields name={name} setName={setName} bank={bank} setBank={setBank} />
+          <AccountPicker picker={picker} />
         </div>
       </Card>
       <Card className="flex flex-col p-5 sm:p-6 lg:col-span-7">
@@ -741,6 +800,7 @@ function Done({ stage, next, onNext }: { stage: Extract<Stage, { kind: 'done' }>
         {stage.outcome.added} {stage.outcome.added === 1 ? 'movimento importato' : 'movimenti importati'}
       </h2>
       <p className="mt-2 max-w-md text-fg-2">
+        {stage.outcome.replaced > 0 ? `Ho sostituito i ${stage.outcome.replaced} movimenti che c'erano già per questo periodo. ` : ''}
         {stage.outcome.duplicates > 0 ? `${stage.outcome.duplicates} erano già presenti e li ho saltati. ` : ''}
         Ho assegnato le categorie in automatico: se qualcuna è sbagliata, correggila da Movimenti e Finny se lo ricorderà.
       </p>
