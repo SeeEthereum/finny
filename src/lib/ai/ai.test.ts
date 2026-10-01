@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { demoSnapshot } from '../demo'
 import { ask, proposeCategories } from './agent'
 import { generateBrief, briefFingerprint } from './brief'
-import { listModels, parseJson } from './client'
+import { listModels, parseJson, rankModels } from './client'
 import { runTool, type ToolContext } from './tools'
 
 const demo = demoSnapshot()
@@ -76,7 +76,7 @@ describe('agent loop', () => {
 
   it('keeps only chat models when listing', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => reply({ data: [{ id: 'text-embedding-3-small' }, { id: 'gpt-x-mini' }, { id: 'whisper-1' }, { id: 'gpt-x' }] })))
-    expect(await listModels(cfg)).toEqual(['gpt-x-mini', 'gpt-x'])
+    expect(await listModels(cfg)).toEqual(['gpt-x', 'gpt-x-mini'])
   })
 
   it('category proposals ignore merchants that were not asked about', async () => {
@@ -168,5 +168,22 @@ describe('category proposals sanity', () => {
       { esercente: 'Ditta Neri', categoria: 'stipendio', sicurezza: 'alta' },
     ] }) } }] })))
     expect(await proposeCategories(cfg, txs)).toEqual([{ merchant: 'Bottega Rossi', category: 'spesa', confidence: 'alta' }])
+  })
+})
+
+describe('model choice and errors', () => {
+  it('puts the newest plain GPT chat model first and drops models that cannot chat', () => {
+    const ids = ['whisper-1', 'sora-2-pro', 'o4-mini-deep-research', 'gpt-5-pro', 'gpt-4o-mini', 'gpt-6.1-sol-2026-09-29', 'gpt-6.1-sol', 'gpt-6-luna', 'computer-use-preview', 'gpt-4.1', 'text-embedding-3-large']
+    expect(rankModels(ids)).toEqual(['gpt-6.1-sol', 'gpt-6.1-sol-2026-09-29', 'gpt-6-luna', 'gpt-4.1', 'gpt-4o-mini'])
+  })
+
+  it('explains gateway timeouts instead of a bare server error', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('<html>Task timed out after 10.01 seconds</html>', { status: 502 })))
+    await expect(ask(cfg, ctx, [], 'ciao')).rejects.toThrow(/troppo.*mini/)
+  })
+
+  it('keeps the status and a text body in other server errors', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('upstream exploded', { status: 500 })))
+    await expect(ask(cfg, ctx, [], 'ciao')).rejects.toThrow('(500). upstream exploded')
   })
 })

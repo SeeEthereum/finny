@@ -71,7 +71,7 @@ export function AiSetup({ compact = false }: { compact?: boolean }) {
         : { apiKey: key.trim(), baseUrl: baseUrl.trim() || DEFAULT_BASE_URL }
       const models = await listModels(cfg)
       if (!models.length) throw new AiError('model', 'La chiave funziona ma non vedo modelli disponibili.')
-      const model = models.includes(ai.model) ? ai.model : models[0]
+      const model = models.includes(ai.model) ? ai.model : models[0] // a saved model that is no longer suitable is replaced
       ai.update(
         server
           ? { passphrase: pass.trim(), models, model, enabled: true }
@@ -225,7 +225,7 @@ export function AiSetup({ compact = false }: { compact?: boolean }) {
                 </option>
               ))}
             </select>
-            <span className="text-xs text-muted">La lista arriva dal tuo account. I modelli più grandi rispondono meglio ma costano di più.</span>
+            <span className="text-xs text-muted">La lista arriva dal tuo account, il primo è quello consigliato. I modelli più grandi rispondono meglio ma sono più lenti e costano di più; se compaiono errori di tempo scaduto, prova una versione "mini".</span>
           </label>
           <div className="flex flex-col gap-2 text-sm text-fg-2">
             <span>Cosa può vedere</span>

@@ -1,6 +1,6 @@
 import { del, get, set } from 'idb-keyval'
 import { create } from 'zustand'
-import { DEFAULT_BASE_URL, SERVER_BASE_URL, type AiConfig } from '../lib/ai/client'
+import { DEFAULT_BASE_URL, isChatModel, rankModels, SERVER_BASE_URL, type AiConfig } from '../lib/ai/client'
 
 const KEY = 'finny:ai:v1'
 
@@ -41,7 +41,10 @@ export const useAi = create<
       // settings saved before the server mode existed used a key in the browser
       if (saved) {
         const legacy = saved as Partial<AiSettings>
-        setState({ ...saved, mode: legacy.mode ?? (saved.apiKey ? 'browser' : 'server'), passphrase: legacy.passphrase ?? '' })
+        // earlier versions could pick a model that can't chat (video, research, "-pro"): replace it
+        const models = rankModels(saved.models ?? [])
+        const model = saved.model && isChatModel(saved.model) ? saved.model : (models[0] ?? '')
+        setState({ ...saved, models, model, mode: legacy.mode ?? (saved.apiKey ? 'browser' : 'server'), passphrase: legacy.passphrase ?? '' })
       }
     } catch {
       /* settings stay for this visit only */

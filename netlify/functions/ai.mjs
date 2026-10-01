@@ -107,17 +107,37 @@ export default async (req, context) => {
   }
 
   const base = (clean(env('OPENAI_BASE_URL')) || 'https://api.openai.com/v1').replace(/\/+$/, '')
+  let model = '-'
+  try {
+    model = body ? JSON.parse(body).model ?? '-' : '-'
+  } catch {
+    /* not JSON: OpenAI will say so */
+  }
+  // stop before the platform does, so the app gets a clear message instead of a bare gateway error
+  const limit = Number(clean(env('FINNY_AI_TIMEOUT_MS'))) || 50_000
+  const abort = new AbortController()
+  const timer = setTimeout(() => abort.abort(), limit)
+  const started = Date.now()
   let upstream
   try {
     upstream = await fetch(`${base}/${target}`, {
       method: req.method,
       headers: { Authorization: `Bearer ${key}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
       body,
+      signal: abort.signal,
     })
   } catch {
-    return fail(502, 'Il server di Netlify non riesce a raggiungere il servizio AI.')
+    clearTimeout(timer)
+    const timedOut = abort.signal.aborted
+    // visible in Netlify → Logs → Functions; never logs prompts, answers or the key
+    console.log(`[finny-ai] ${target} model=${model} ${timedOut ? 'TIMEOUT' : 'NETWORK-ERROR'} ${Date.now() - started}ms`)
+    return timedOut
+      ? fail(504, `Il modello ${model} non ha risposto entro ${Math.round(limit / 1000)} secondi.`)
+      : fail(502, 'Il server di Netlify non riesce a raggiungere il servizio AI.')
   }
+  clearTimeout(timer)
   const text = await upstream.text()
+  console.log(`[finny-ai] ${target} model=${model} status=${upstream.status} ${Date.now() - started}ms`)
   // a 401 from upstream is about the server key, not the visitor: say so
   if (upstream.status === 401) return fail(502, `OpenAI rifiuta la chiave salvata su Netlify (${name}): non è valida o è stata revocata.`)
   return new Response(text, { status: upstream.status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } })

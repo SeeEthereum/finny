@@ -110,4 +110,16 @@ describe('Netlify AI relay', () => {
     expect(body.keyFound).toBe(true) // found by the last-resort scan: related name, sk- value
     expect(body.keyVariable).toBe('OPENAI_APY_KEY')
   })
+
+  it('stops a slow upstream call with a clear message and logs only metadata', async () => {
+    vars.FINNY_AI_TIMEOUT_MS = '20'
+    vi.stubGlobal('fetch', vi.fn((_u, init) => new Promise((_, reject) => init.signal.addEventListener('abort', () => reject(new Error('aborted'))))))
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const res = await handler(req('/api/ai/chat/completions', { method: 'POST', body: JSON.stringify({ model: 'gpt-slow', messages: [{ role: 'user', content: 'segreto' }] }) }))
+    expect(res.status).toBe(504)
+    expect((await res.json()).error.message).toMatch(/gpt-slow/)
+    expect(log.mock.calls[0][0]).toMatch(/chat\/completions model=gpt-slow TIMEOUT/)
+    expect(JSON.stringify(log.mock.calls)).not.toMatch(/segreto|sk-server/)
+    log.mockRestore()
+  })
 })

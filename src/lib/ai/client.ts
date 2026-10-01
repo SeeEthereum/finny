@@ -69,11 +69,17 @@ async function call<T>(cfg: Pick<AiConfig, 'apiKey' | 'baseUrl' | 'passphrase'>,
   clearTimeout(timer)
   if (!res.ok) {
     let detail = ''
+    const raw = await res.text().catch(() => '')
     try {
-      const j = await res.json()
-      detail = j?.error?.message ?? ''
+      detail = JSON.parse(raw)?.error?.message ?? ''
     } catch {
-      /* no JSON body */
+      detail = raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200)
+    }
+    if (res.status === 504 || (res.status === 502 && /time ?out|timed out/i.test(detail))) {
+      throw new AiError(
+        'server',
+        `Il modello ci ha messo troppo e la richiesta è stata interrotta (${res.status}). Scegli un modello più veloce in Impostazioni → Assistente AI (per esempio una versione "mini").`,
+      )
     }
     if (res.status === 401) throw new AiError('auth', 'La chiave API non è valida o è stata revocata.')
     if (res.status === 429) throw new AiError('quota', `Limite raggiunto: credito esaurito o troppe richieste. ${detail}`.trim())
@@ -105,10 +111,32 @@ export async function serverStatus(cfg: Pick<AiConfig, 'baseUrl' | 'passphrase'>
 /** Lists chat-capable models available to this key; also proves the key works. */
 export async function listModels(cfg: Pick<AiConfig, 'apiKey' | 'baseUrl' | 'passphrase'>): Promise<string[]> {
   const data = await call<{ data?: { id: string }[] }>(cfg, '/models')
-  const ids = (data.data ?? []).map((m) => m.id)
-  // OpenAI lists embeddings, audio, image models too: keep the ones that can chat
-  const chat = ids.filter((id) => !/(embedding|whisper|tts|dall-e|image|audio|realtime|transcribe|moderation|search|davinci|babbage)/i.test(id))
-  return (chat.length ? chat : ids).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
+  return rankModels((data.data ?? []).map((m) => m.id))
+}
+
+// models that can't answer a Chat Completions request with tools, or are far too slow for it
+const NOT_FOR_CHAT = /(embedding|whisper|tts|dall-e|image|audio|realtime|transcribe|moderation|search|davinci|babbage|sora|codex|computer-use|deep-research|instruct|-pro\b|oss)/i
+
+function version(id: string) {
+  const m = id.match(/^(?:gpt|chatgpt)-?(\d+(?:\.\d+)?)/i) ?? id.match(/^o(\d+)/i)
+  return m ? Number(m[1]) : 0
+}
+
+/**
+ * Best candidates first: the newest GPT family, its plain (shortest) id before dated snapshots,
+ * then the rest. Unknown providers' models are kept, in their own order, after those.
+ */
+export function isChatModel(id: string) {
+  return !NOT_FOR_CHAT.test(id)
+}
+
+export function rankModels(ids: string[]): string[] {
+  const usable = ids.filter((id) => !NOT_FOR_CHAT.test(id))
+  const list = usable.length ? usable : ids
+  const gpt = list.filter((id) => /^(gpt|chatgpt)-/i.test(id))
+  const rest = list.filter((id) => !gpt.includes(id))
+  gpt.sort((a, b) => version(b) - version(a) || a.length - b.length || a.localeCompare(b))
+  return [...gpt, ...rest]
 }
 
 interface Completion {
