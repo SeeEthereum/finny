@@ -126,7 +126,8 @@ describe('PDF lines', () => {
     const res = parsePdfLines(lines)
     expect(res.signSource).toBe('columns')
     expect(res.drafts.map((d) => d.amount)).toEqual([-45.2, 2150])
-    expect(res.drafts[0].description).toBe('PAGAMENTO POS ESSELUNGA MILANO VIA TORINO')
+    expect(res.drafts[0].description).toBe('PAGAMENTO POS ESSELUNGA')
+    expect(res.drafts[0].detail).toBe('MILANO VIA TORINO')
   })
 })
 
@@ -187,6 +188,71 @@ describe('PDF formats seen on real statements', () => {
       l(740, [[30, '02.09.26'], [160, 'PAGAMENTO POS ORE 12.30 BAR 4,50'], [425, '4,50'], [535, '995,50']]),
     ])
     expect(res.drafts.map((d) => d.amount)).toEqual([-4.5])
+  })
+})
+
+describe('Revolut-style statement', () => {
+  // invented names and amounts, laid out like a Revolut "Estratto conto" PDF
+  const l = (page: number, y: number, items: [number, string][]): PdfLine => ({ page, y, items: items.map(([x, str]) => ({ x, w: str.length * 4.5, str })) })
+  const lines: PdfLine[] = [
+    l(1, 689, [[40, 'MARIO ALBERTO ROSSI']]),
+    l(1, 337, [[43, 'Prodotto'], [253, 'Saldo iniziale'], [335, 'Denaro in uscita'], [417, 'Denaro in entrata']]),
+    l(1, 210, [[40, 'In sospeso da 1 gennaio 2026 a 1 ottobre 2026']]),
+    l(1, 184, [[43, "Data d'inizio"], [125, 'Descrizione'], [335, 'Denaro in uscita'], [417, 'Denaro in entrata']]),
+    l(1, 165, [[43, '30 set 2026'], [125, 'Bar Centrale'], [335, '1,00€']]),
+    l(1, 157, [[125, 'ID transazione: 6abc511e']]),
+    l(2, 462, [[40, 'Transazioni del conto dal giorno 1 gennaio 2026 al giorno 1 ottobre 2026']]),
+    l(2, 436, [[43, 'Data'], [125, 'Descrizione'], [335, 'Denaro in uscita'], [417, 'Denaro in entrata'], [535, 'Saldo']]),
+    l(2, 416, [[43, '4 gen 2026'], [125, 'Pagamento da ACME SRL'], [417, '1.500,00€'], [519, '1.500,21€']]),
+    l(2, 409, [[125, 'Riferimento: Cedolino dicembre']]),
+    l(2, 404, [[125, 'ID transazione: 695a70ae']]),
+    l(2, 399, [[125, 'Da: ACME SRL, IT00X0000000000000000000000']]),
+    l(2, 382, [[43, '4 gen 2026'], [125, 'To Mario Alberto Rossi'], [335, '150,00€'], [519, '1.350,21€']]),
+    l(2, 375, [[125, 'Riferimento: Altro conto']]),
+    l(2, 369, [[125, 'ID transazione: 695a732c']]),
+    l(2, 347, [[43, '5 gen 2026'], [125, 'Pagamento a favore di LUCIA BIANCHI'], [335, '20,00€'], [519, '1.330,21€']]),
+    l(2, 340, [[125, 'ID transazione: 695d62f0']]),
+    l(2, 318, [[43, '6 gen 2026'], [125, 'Netflix'], [335, '13,99€'], [519, '1.316,22€']]),
+    l(2, 311, [[125, 'ID transazione: 695d6303']]),
+    l(2, 306, [[125, 'A: Netflix.com, Amsterdam']]),
+    l(2, 300, [[125, 'Carta: 400000******0000']]),
+    l(2, 283, [[43, '6 gen 2026'], [125, 'Netflix'], [335, '13,99€'], [519, '1.302,23€']]),
+    l(2, 276, [[125, 'ID transazione: 695d6999']]),
+    l(3, 477, [[40, 'Transazioni stornate dal giorno 1 gennaio 2026 al giorno 1 ottobre 2026']]),
+    l(3, 432, [[43, '21 apr 2026'], [125, 'Spotify'], [335, '1,01€']]),
+  ]
+  const res = parsePdfLines(lines, 3)
+
+  it('reads the columns, the sections, the holder and the closing balance', () => {
+    expect(res.signSource).toBe('columns')
+    expect(res.holder).toBe('MARIO ALBERTO ROSSI')
+    expect(res.sections.map((s) => [s.name, s.count, s.includeByDefault])).toEqual([
+      ['In sospeso', 1, false],
+      ['Transazioni del conto', 5, true],
+      ['Transazioni stornate', 1, false],
+    ])
+    expect(res.latestBalance).toEqual({ amount: 1302.23, date: '2026-01-06' })
+    const main = res.drafts.filter((d) => d.section === 'Transazioni del conto')
+    expect(main.map((d) => d.amount)).toEqual([1500, -150, -20, -13.99, -13.99])
+    expect(main[0].detail).toBe('Cedolino dicembre · ACME SRL, IT00X0000000000000000000000')
+    expect(main[3].detail).toBe('Netflix.com, Amsterdam')
+  })
+
+  it('imports identical rows, spots own-account transfers, salary and payments to people', async () => {
+    const { useFinny } = await import('../store/useFinny')
+    const main = res.drafts.filter((d) => d.section === 'Transazioni del conto')
+    const out = useFinny.getState().importDrafts({ accountName: 'Test', institution: 'Revolut', source: 'pdf', drafts: main, holder: res.holder })
+    expect(out).toMatchObject({ added: 5, duplicates: 0 })
+    const cats = useFinny.getState().transactions.filter((t) => t.accountId === out.accountId).map((t) => [t.merchant, t.category])
+    expect(cats).toEqual(expect.arrayContaining([
+      ['Acme Srl', 'stipendio'],
+      ['Mario Alberto Rossi', 'trasferimenti'],
+      ['Lucia Bianchi', 'persone'],
+      ['Netflix', 'abbonamenti'],
+    ]))
+    // importing the same file again adds nothing
+    const again = useFinny.getState().importDrafts({ accountId: out.accountId, accountName: 'Test', institution: 'Revolut', source: 'pdf', drafts: main, holder: res.holder })
+    expect(again).toMatchObject({ added: 0, duplicates: 5 })
   })
 })
 

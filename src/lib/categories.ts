@@ -1,13 +1,16 @@
 import {
   ArrowLeftRight, Banknote, BookOpen, Briefcase, Bus, Car, Clapperboard, Coins, Gift,
   HeartPulse, Home, Landmark, PawPrint, Plane, Receipt, RefreshCcw, Repeat, ShoppingBag,
-  ShoppingCart, Smartphone, Sparkles, TrendingUp, UtensilsCrossed, Bike, Zap,
+  ShoppingCart, Smartphone, Sparkles, TrendingUp, UtensilsCrossed, Bike, Users, Zap,
   type LucideIcon,
 } from 'lucide-react'
 import type { CategoryId } from './types'
 
-/** How a category counts in the 50/30/20 split */
-export type Bucket = 'needs' | 'wants' | 'savings' | 'income' | 'neutral'
+/**
+ * How a category counts in the 50/30/20 split. 'other' is real money out that fits neither
+ * needs nor wants (payments to people): it counts as spending but stays out of the split.
+ */
+export type Bucket = 'needs' | 'wants' | 'savings' | 'income' | 'neutral' | 'other'
 
 export interface CategoryDef {
   id: CategoryId
@@ -43,6 +46,7 @@ export const CATEGORIES: CategoryDef[] = [
   { id: 'contanti', label: 'Prelievi contanti', icon: Banknote, bucket: 'wants', hue: 60 },
   { id: 'investimenti', label: 'Risparmio e investimenti', icon: TrendingUp, bucket: 'savings', hue: 170 },
   { id: 'trasferimenti', label: 'Giroconti', icon: ArrowLeftRight, bucket: 'neutral', hue: 230 },
+  { id: 'persone', label: 'Pagamenti a persone', icon: Users, bucket: 'other', hue: 25 },
   { id: 'altro', label: 'Altro', icon: Sparkles, bucket: 'wants', hue: 250 },
 ]
 

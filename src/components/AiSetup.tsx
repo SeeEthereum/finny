@@ -1,6 +1,6 @@
-import { Eye, EyeOff, KeyRound, Loader2, Server, ShieldAlert, Trash2 } from 'lucide-react'
-import { useState } from 'react'
-import { AiError, DEFAULT_BASE_URL, listModels, SERVER_BASE_URL } from '../lib/ai/client'
+import { CircleCheck, CircleX, Eye, EyeOff, KeyRound, Loader2, Server, ShieldAlert, Trash2 } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
+import { AiError, DEFAULT_BASE_URL, listModels, SERVER_BASE_URL, serverStatus, type ServerStatus } from '../lib/ai/client'
 import { useAi } from '../store/ai'
 import { toast } from './ui/toast'
 import { Button, cx, Segmented } from './ui/primitives'
@@ -47,10 +47,25 @@ export function AiSetup({ compact = false }: { compact?: boolean }) {
   const [pass, setPass] = useState(ai.passphrase)
   const [showPass, setShowPass] = useState(!!ai.passphrase)
   const server = ai.mode === 'server'
+  const [status, setStatus] = useState<ServerStatus | null>(null)
+  const [statusError, setStatusError] = useState('')
 
   const verify = async () => {
     setBusy(true)
+    setStatusError('')
     try {
+      if (server) {
+        let st: ServerStatus
+        try {
+          st = await serverStatus({ baseUrl: SERVER_BASE_URL, passphrase: pass.trim() || undefined })
+        } catch (e) {
+          setStatus(null)
+          setStatusError(e instanceof Error ? e.message : 'La funzione non risponde.')
+          throw e
+        }
+        setStatus(st)
+        if (!st.keyFound) throw new AiError('auth', 'La funzione è attiva ma non trova la chiave: guarda il controllo qui sotto.')
+      }
       const cfg = server
         ? { apiKey: '', baseUrl: SERVER_BASE_URL, passphrase: pass.trim() || undefined }
         : { apiKey: key.trim(), baseUrl: baseUrl.trim() || DEFAULT_BASE_URL }
@@ -126,6 +141,7 @@ export function AiSetup({ compact = false }: { compact?: boolean }) {
             {busy ? <Loader2 size={15} className="animate-spin" /> : null}
             {ai.enabled ? 'Verifica di nuovo' : 'Verifica collegamento'}
           </Button>
+          {(status || statusError) && <Diagnosis status={status} error={statusError} />}
         </form>
       ) : (
       <form
@@ -237,6 +253,58 @@ export function AiSetup({ compact = false }: { compact?: boolean }) {
           Assistente AI attivo
         </label>
       )}
+    </div>
+  )
+}
+
+function Check({ ok, children }: { ok: boolean | null; children: ReactNode }) {
+  return (
+    <li className="flex items-start gap-2">
+      {ok ? <CircleCheck size={16} className="mt-0.5 shrink-0 text-good" /> : <CircleX size={16} className="mt-0.5 shrink-0 text-critical" />}
+      <span className="min-w-0">{children}</span>
+    </li>
+  )
+}
+
+/** What the Netlify Function reported, as a checklist with the fix for each failing line */
+function Diagnosis({ status, error }: { status: ServerStatus | null; error: string }) {
+  return (
+    <div className="rounded-2xl border border-line bg-bg-2 p-4 text-sm text-fg-2">
+      <div className="mb-2 font-semibold text-fg">Controllo del collegamento</div>
+      <ul className="space-y-2">
+        <Check ok={!!status}>
+          {status ? 'La funzione AI è attiva su questo sito.' : <>La funzione non risponde: {error} Se hai pubblicato trascinando la cartella su Netlify Drop, le funzioni non vengono caricate: collega il repository GitHub.</>}
+        </Check>
+        {status && (
+          <>
+            <Check ok={status.keyFound}>
+              {status.keyFound ? (
+                <>
+                  Chiave trovata nella variabile <code className="font-mono text-fg">{status.keyVariable}</code>.
+                </>
+              ) : (
+                <>
+                  Nessuna chiave visibile alla funzione.{' '}
+                  {status.relatedVariables.length ? (
+                    <>
+                      Variabili con nomi simili: <code className="font-mono text-fg">{status.relatedVariables.join(', ')}</code>.
+                    </>
+                  ) : (
+                    'Non vedo nessuna variabile con OPENAI nel nome.'
+                  )}{' '}
+                  Su Netlify, in Environment variables, apri la variabile e controlla: nome <code className="font-mono text-fg">OPENAI_API_KEY</code>, scope che include <em>Functions</em>, valore valido per tutti i contesti di deploy (o almeno per «{status.deployContext ?? 'questo deploy'}»). Poi Deploys → Trigger deploy.
+                </>
+              )}
+            </Check>
+            {status.keyFound && (
+              <Check ok={status.keyLooksValid}>
+                {status.keyLooksValid ? 'Il formato della chiave sembra giusto (inizia con sk-).' : 'Il valore non inizia con sk-: probabilmente è stato incollato qualcos\'altro.'}
+              </Check>
+            )}
+            {status.deployContext && <li className="pl-6 text-xs text-muted">Contesto di questo deploy: {status.deployContext}</li>}
+          </>
+        )}
+      </ul>
     </div>
   )
 }

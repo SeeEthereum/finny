@@ -66,7 +66,9 @@ describe('Netlify AI relay', () => {
 
   it('explains a missing or rejected server key', async () => {
     delete vars.OPENAI_API_KEY
-    expect(await (await handler(req('/api/ai/models'))).json()).toEqual({ error: { message: 'Su Netlify manca la variabile OPENAI_API_KEY.' } })
+    const missing = await handler(req('/api/ai/models'))
+    expect(missing.status).toBe(500)
+    expect((await missing.json()).error.message).toMatch(/OPENAI_API_KEY/)
     vars.OPENAI_API_KEY = 'sk-revoked'
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{"error":{"message":"Incorrect API key"}}', { status: 401 })))
     const res = await handler(req('/api/ai/models'))
@@ -78,5 +80,34 @@ describe('Netlify AI relay', () => {
     vi.stubGlobal('fetch', vi.fn())
     const res = await handler(req('/api/ai/chat/completions', { method: 'POST', body: 'x'.repeat(300 * 1024) }))
     expect(res.status).toBe(413)
+  })
+
+  it('finds the key under common alternative names and cleans pasted values', async () => {
+    const upstream = vi.fn(async () => new Response('{"data":[]}', { status: 200 }))
+    vi.stubGlobal('fetch', upstream)
+    delete vars.OPENAI_API_KEY
+    vars.OPENAI_KEY = '  "Bearer sk-pasted"\n'
+    await handler(req('/api/ai/models'))
+    expect(upstream.mock.calls[0][1].headers.Authorization).toBe('Bearer sk-pasted')
+  })
+
+  it('reports what it can see without ever returning the key', async () => {
+    vars.OPENAI_API_KEY = 'sk-very-secret'
+    vars.NETLIFY_NOTHING = 'x'
+    globalThis.Netlify.env.toObject = () => ({ ...vars })
+    const res = await handler(req('/api/ai/status'), { deploy: { context: 'branch-deploy' } })
+    const body = await res.json()
+    expect(body).toMatchObject({ function: true, keyFound: true, keyVariable: 'OPENAI_API_KEY', keyLooksValid: true, deployContext: 'branch-deploy' })
+    expect(body.relatedVariables).toContain('OPENAI_API_KEY')
+    expect(JSON.stringify(body)).not.toContain('sk-very-secret')
+  })
+
+  it('status works even when no key is set, so the problem can be diagnosed', async () => {
+    delete vars.OPENAI_API_KEY
+    vars.OPENAI_APY_KEY = 'sk-typo'
+    globalThis.Netlify.env.toObject = () => ({ ...vars })
+    const body = await (await handler(req('/api/ai/status'))).json()
+    expect(body.keyFound).toBe(true) // found by the last-resort scan: related name, sk- value
+    expect(body.keyVariable).toBe('OPENAI_APY_KEY')
   })
 })

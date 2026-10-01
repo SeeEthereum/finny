@@ -29,6 +29,10 @@ export interface DraftTx {
   key: string
   date: string
   description: string
+  /** secondary lines (counterpart, reference): used to categorize, not to name the merchant */
+  detail?: string
+  /** statement section the row came from, e.g. "Transazioni del conto" */
+  section?: string
   amount: number
   currency: string
   balance?: number

@@ -9,14 +9,16 @@ const KEYWORDS: [CategoryId, string[]][] = [
   ['trasferimenti', [
     'giroconto', 'giro conto', 'trasferimento tra conti', 'ricarica carta', 'ricarica prepagata',
     'top up', 'topup', 'transfer to', 'transfer from', 'to pocket', 'from pocket', 'salvadanaio',
+    'ricarica di apple pay', 'ricarica di google pay', 'ricarica da carta',
   ]],
   ['contanti', ['prelievo', 'prelevamento', 'prel bancomat', 'atm withdrawal', 'cash withdrawal']],
   ['investimenti', [
     'piano di accumulo', 'pac ', 'fondo pensione', 'previdenza complementare', 'etf', 'trade republic',
     'scalable capital', 'directa', 'fineco trading', 'moneyfarm', 'satispay risparmi', 'conto deposito',
     'acquisto titoli', 'sottoscrizione fondi', 'buono fruttifero', 'btp', 'raisin', 'investimento',
+    'moonpay', 'coinbase', 'binance', 'kraken', 'bitpanda', 'young platform', 'conio', 'bybit',
   ]],
-  ['stipendio', ['stipendio', 'emolumenti', 'retribuzione', 'busta paga', 'salary', 'payroll', 'competenze mese', 'accredito emolumenti', 'noipa']],
+  ['stipendio', ['stipendio', 'emolumenti', 'retribuzione', 'busta paga', 'cedolino', 'salary', 'payroll', 'competenze mese', 'accredito emolumenti', 'noipa']],
   ['rimborsi', ['rimborso', 'refund', 'storno', 'reso ', 'cashback', 'rimb ']],
   ['delivery', ['uber eats', 'ubereats', 'deliveroo', 'glovo', 'just eat', 'justeat', 'wolt', 'foodinho']],
   ['abbonamenti', [
@@ -26,6 +28,8 @@ const KEYWORDS: [CategoryId, string[]][] = [
     'claude ai', 'microsoft 365', 'office 365', 'adobe', 'canva', 'dropbox', 'notion', 'audible',
     'kindle unlimited', 'paramount', 'crunchyroll', 'playstation', 'xbox', 'nintendo', 'patreon',
     'duolingo', 'linkedin', 'mediaset infinity', 'timvision', 'tim vision', 'apple music', 'tidal',
+    'twitter', 'x premium', 'setapp', 'subbyx', 'netlify', 'github', 'vercel', 'midjourney', 'perplexity',
+    'apple.com', 'together price',
   ]],
   ['telefonia', [
     'tim ', 'telecom italia', 'vodafone', 'windtre', 'wind tre', 'iliad', 'fastweb', 'ho mobile',
@@ -55,7 +59,7 @@ const KEYWORDS: [CategoryId, string[]][] = [
     'ristorante', 'trattoria', 'osteria', 'pizzeria', 'pizza', 'sushi', 'bar ', 'caffe', 'caffè', 'cafe',
     'bistrot', 'pasticceria', 'gelateria', 'gelato', 'mcdonald', 'burger king', 'kfc', 'starbucks', 'autogrill',
     'old wild west', 'roadhouse', 'poke', 'kebab', 'braceria', 'enoteca', 'pub ', 'birreria', 'tavola calda',
-    'rosticceria', 'piadineria', 'spizzico', 'cioccolati italiani', 'signorvino', 'la piadineria', 'five guys',
+    'rosticceria', 'piadineria', 'spizzico', 'pasticc', 'panineria', 'paninoteca', 'cioccolati italiani', 'signorvino', 'la piadineria', 'five guys',
   ]],
   ['auto', [
     'eni ', 'enilive', 'eni live', 'q8', 'ip ', 'ipplus', 'tamoil', 'esso', 'api ', 'shell', 'total erg',
@@ -67,6 +71,7 @@ const KEYWORDS: [CategoryId, string[]][] = [
     'uber', 'trenitalia', 'italo', 'ntv', 'trenord', 'atm milano', 'atm ', 'atac', 'gtt', 'tper', 'amat',
     'anm ', 'actv', 'flixbus', 'itabus', 'freenow', 'free now', 'taxi', 'bolt', 'lime', 'dott ', 'tier ',
     'bird ', 'enjoy', 'share now', 'sharenow', 'zity', 'cotral', 'busitalia', 'metro', 'abbonamento trasporti',
+    'blinkee', 'helbiz', 'cityscoot',
   ]],
   ['viaggi', [
     'ryanair', 'easyjet', 'wizz', 'ita airways', 'alitalia', 'volotea', 'vueling', 'lufthansa', 'airbnb',
@@ -87,6 +92,7 @@ const KEYWORDS: [CategoryId, string[]][] = [
     'cinema', 'uci cinemas', 'the space', 'teatro', 'museo', 'concerto', 'ticketone', 'ticketmaster',
     'vivaticket', 'palestra', 'mcfit', 'virgin active', 'fitprime', 'anytime fitness', 'piscina',
     'decathlon', 'steam', 'epic games', 'lottomatica', 'sisal', 'snai', 'bowling', 'discoteca', 'escape room',
+    'giochi', 'scommesse', 'tabacchi giochi', 'twitch',
   ]],
   ['shopping', [
     'amazon', 'amzn', 'zalando', 'shein', 'temu', 'aliexpress', 'ebay', 'vinted', 'zara', 'h&m', 'h m ',
@@ -104,6 +110,7 @@ const KEYWORDS: [CategoryId, string[]][] = [
   ['commissioni', [
     'commissione', 'commissioni', 'canone conto', 'canone mensile', 'canone carta', 'spese tenuta conto',
     'competenze di chiusura', 'spese di liquidazione', 'costo bonifico', 'spese bonifico', 'interessi passivi',
+    'canone piano', 'piano metal', 'piano ultra', 'piano premium', 'piano plus',
     'fee ', 'costo operazione',
   ]],
 ]
@@ -199,8 +206,10 @@ function matches(haystack: string, keyword: string) {
   return padded.includes(` ${kw}`)
 }
 
+const LEAD_IN = /^(to|from|pagamento (a favore di|da parte di|da|a)|bonifico (a favore di|da)|ricarica di|a eur|da eur|payment (to|from))\s+/i
+
 export function merchantName(description: string) {
-  const low = description.toLowerCase()
+  const low = description.toLowerCase().replace(LEAD_IN, '')
   for (const [re, name] of MERCHANT_NAMES) if (re.test(low)) return name
   let s = low
   for (const re of NOISE) s = s.replace(re, ' ')
@@ -210,11 +219,26 @@ export function merchantName(description: string) {
   return words.map((w) => w[0].toUpperCase() + w.slice(1)).join(' ')
 }
 
+const TO_PERSON = /^(to|pagamento a favore di|bonifico a favore di|bonifico a|payment to)\s+(.+?)\s*&?$/i
+const COMPANY = /\b(srl|s\.?r\.?l|spa|s\.?p\.?a|snc|sas|ltd|gmbh|inc|llc|bv|ag|limited|company|services?|shop|store|bank|banca|eur|conto|deposito)\b/i
+
+/** "To Mario Rossi", "Pagamento a favore di MARIO ROSSI": money sent to a person, not a shop */
+export function isPaymentToPerson(description: string, amount: number) {
+  if (amount >= 0) return false
+  const firstLine = description.split(' · ')[0].trim()
+  const m = firstLine.match(TO_PERSON)
+  if (!m) return false
+  const name = m[2].replace(/&$/, '').trim()
+  const words = name.split(/\s+/)
+  return words.length >= 2 && words.length <= 5 && /^[\p{L}' .&-]+$/u.test(name) && !COMPANY.test(name)
+}
+
 export function categorize(description: string, amount: number, rules: Rule[] = []): CategoryId {
   const text = normalize(description)
   for (const r of rules) {
     if (r.match && text.includes(normalize(r.match))) return r.category
   }
+  if (isPaymentToPerson(description, amount)) return 'persone'
   for (const [cat, kws] of KEYWORDS) {
     if (!kws.some((k) => matches(text, k))) continue
     // incoming money can only land in an income-ish or neutral category

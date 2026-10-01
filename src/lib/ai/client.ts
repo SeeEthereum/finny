@@ -87,6 +87,21 @@ async function call<T>(cfg: Pick<AiConfig, 'apiKey' | 'baseUrl' | 'passphrase'>,
   return (await res.json()) as T
 }
 
+export interface ServerStatus {
+  function: boolean
+  keyFound: boolean
+  keyVariable: string | null
+  keyLooksValid: boolean | null
+  relatedVariables: string[]
+  deployContext: string | null
+  passphraseRequired: boolean
+}
+
+/** What the Netlify Function can see: whether it runs, which variable holds the key (names only) */
+export async function serverStatus(cfg: Pick<AiConfig, 'baseUrl' | 'passphrase'>): Promise<ServerStatus> {
+  return call<ServerStatus>({ apiKey: '', ...cfg }, '/status')
+}
+
 /** Lists chat-capable models available to this key; also proves the key works. */
 export async function listModels(cfg: Pick<AiConfig, 'apiKey' | 'baseUrl' | 'passphrase'>): Promise<string[]> {
   const data = await call<{ data?: { id: string }[] }>(cfg, '/models')

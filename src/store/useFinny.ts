@@ -10,6 +10,8 @@ import type { Account, Budgets, CategoryId, Rule, Snapshot, Transaction, TxSourc
 const KEY = 'finny:snapshot:v1'
 
 export interface ImportRequest {
+  /** account holder printed on the statement: movements to or from this name are transfers between own accounts */
+  holder?: string
   accountId?: string
   accountName: string
   institution: string
@@ -138,24 +140,40 @@ export const useFinny = create<State>((setState, getState) => {
         account = { ...account, balance: req.balance }
       }
 
-      const seen = new Set(base.transactions.filter((t) => t.accountId === account!.id).map(fingerprint))
+      const holderWords = req.holder ? normalize(req.holder).split(' ').filter((w) => w.length > 1) : []
+      const isSelf = (text: string) => {
+        if (holderWords.length < 2) return false
+        const words = new Set(normalize(text).split(' '))
+        return holderWords.every((w) => words.has(w))
+      }
+      // how many times each movement is already stored: identical rows in the same file
+      // (two coffees, same bar, same day) are all kept; only rows already imported are skipped
+      const existing = new Map<string, number>()
+      for (const t of base.transactions) {
+        if (t.accountId !== account.id) continue
+        const fp = fingerprint(t)
+        existing.set(fp, (existing.get(fp) ?? 0) + 1)
+      }
       const added: Transaction[] = []
       let duplicates = 0
       for (const d of req.drafts) {
-        const fp = fingerprint(d)
-        if (seen.has(fp)) {
+        const full = d.detail ? `${d.description} · ${d.detail}` : d.description
+        const fp = fingerprint({ ...d, description: full })
+        const left = existing.get(fp) ?? 0
+        if (left > 0) {
+          existing.set(fp, left - 1)
           duplicates++
           continue
         }
-        seen.add(fp)
         added.push({
           id: uid(),
           date: d.date,
-          description: d.description,
+          description: full,
+          // the name comes from the main line only; the details help pick the category
           merchant: merchantName(d.description),
           amount: d.amount,
           currency: d.currency,
-          category: categorize(d.description, d.amount, s.rules),
+          category: isSelf(d.description) ? 'trasferimenti' : categorize(full, d.amount, s.rules),
           accountId: account.id,
           source: req.source,
         })

@@ -23,6 +23,7 @@ export type CategoryId =
   | 'contanti'
   | 'investimenti'
   | 'trasferimenti'
+  | 'persone'
   | 'altro'
 
 export type TxSource = 'csv' | 'xlsx' | 'pdf' | 'demo' | 'bank' | 'manual'

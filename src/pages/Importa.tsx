@@ -391,13 +391,13 @@ function AccountFields({ name, setName, bank, setBank }: { name: string; setName
   )
 }
 
-function useCommit(source: TxSource, fileName: string, onDone: (name: string, o: ImportOutcome) => void) {
+function useCommit(source: TxSource, fileName: string, onDone: (name: string, o: ImportOutcome) => void, detectedBank?: string) {
   const importDrafts = useFinny((s) => s.importDrafts)
   const accounts = useFinny((s) => s.accounts)
   const isDemo = useFinny((s) => s.isDemo)
   const [name, setName] = useState('')
-  const [bank, setBank] = useState(guessName(fileName))
-  const commit = (drafts: DraftTx[], balance?: { amount: number; date: string }) => {
+  const [bank, setBank] = useState(detectedBank || guessName(fileName))
+  const commit = (drafts: DraftTx[], balance?: { amount: number; date: string }, holder?: string) => {
     const existing = isDemo ? undefined : accounts.find((a) => a.name.toLowerCase() === (name.trim() || 'conto principale').toLowerCase())
     const outcome = importDrafts({
       accountId: existing?.id,
@@ -406,6 +406,7 @@ function useCommit(source: TxSource, fileName: string, onDone: (name: string, o:
       source,
       drafts,
       balance,
+      holder,
     })
     onDone(fileName, outcome)
   }
@@ -620,8 +621,17 @@ function PdfReview({
   onCancel: () => void
   onDone: (name: string, o: ImportOutcome) => void
 }) {
-  const [drafts, setDrafts] = useState(stage.result.drafts)
-  const { name, setName, bank, setBank, commit } = useCommit('pdf', stage.name, onDone)
+  const [all, setAll] = useState(stage.result.drafts)
+  const sections = stage.result.sections
+  const [included, setIncluded] = useState(() => new Set(sections.filter((x) => x.includeByDefault).map((x) => x.name)))
+  const drafts = useMemo(() => all.filter((d) => included.has(d.section ?? 'Movimenti')), [all, included])
+  const setDrafts = setAll
+  const totals = useMemo(() => {
+    const out = drafts.filter((d) => d.amount < 0).reduce((a, d) => a - d.amount, 0)
+    const inc = drafts.filter((d) => d.amount > 0).reduce((a, d) => a + d.amount, 0)
+    return { out, inc }
+  }, [drafts])
+  const { name, setName, bank, setBank, commit } = useCommit('pdf', stage.name, onDone, stage.result.institution)
   const flip = (key: string) => setDrafts((ds) => ds.map((d) => (d.key === key ? { ...d, amount: -d.amount } : d)))
   const note = {
     columns: { tone: 'good', text: 'Ho riconosciuto le colonne Dare/Avere: il segno dei movimenti dovrebbe essere corretto.' },
@@ -642,6 +652,38 @@ function PdfReview({
         <h2 className="mt-4 text-lg font-semibold text-fg">
           {drafts.length} movimenti in {stage.result.pages} {stage.result.pages === 1 ? 'pagina' : 'pagine'}
         </h2>
+        {sections.length > 1 && (
+          <div className="mt-3 space-y-1.5">
+            <div className="text-sm text-fg-2">Sezioni dell'estratto: importo solo il conto. Movimenti in sospeso, stornati e del conto deposito sono esclusi per non contarli due volte.</div>
+            {sections.map((x) => {
+              const on = included.has(x.name)
+              return (
+                <label key={x.name} className={cx('flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 text-sm transition-colors', on ? 'border-accent/50 bg-accent-soft' : 'border-line')}>
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    onChange={() =>
+                      setIncluded((cur) => {
+                        const n = new Set(cur)
+                        if (n.has(x.name)) n.delete(x.name)
+                        else n.add(x.name)
+                        return n
+                      })
+                    }
+                    className="size-4 accent-[var(--accent)]"
+                  />
+                  <span className="flex-1 text-fg">{x.name}</span>
+                  <span className="text-muted tabular-nums">{x.count}</span>
+                </label>
+              )
+            })}
+          </div>
+        )}
+        {stage.result.holder && (
+          <p className="mt-3 text-sm text-fg-2">
+            Intestatario: <span className="font-medium text-fg">{stage.result.holder}</span>. I movimenti verso o da questo nome li considero giroconti tra i tuoi conti, non spese né entrate.
+          </p>
+        )}
         <div className={cx('mt-3 flex items-start gap-2 rounded-xl border p-3 text-sm', note.tone === 'good' ? 'border-good/40 bg-good/10' : 'border-warning/40 bg-warning/10')}>
           {note.tone === 'good' ? <Check size={16} className="mt-0.5 shrink-0 text-good" /> : <TriangleAlert size={16} className="mt-0.5 shrink-0 text-warning" />}
           <span className="text-fg">{note.text}</span>
@@ -657,13 +699,21 @@ function PdfReview({
         </div>
       </Card>
       <Card className="flex flex-col p-5 sm:p-6 lg:col-span-7">
-        <h2 className="text-lg font-semibold text-fg">Anteprima</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-fg">Anteprima</h2>
+          <div className="flex gap-3 text-sm tabular-nums">
+            <span className="text-good-text">+{money(totals.inc)}</span>
+            <span className="text-fg">−{money(totals.out)}</span>
+          </div>
+        </div>
+        <p className="mt-1 text-xs text-muted">Confronta questi totali con il riepilogo stampato nell'estratto: devono coincidere.</p>
+        {stage.result.latestBalance && <p className="mt-1 text-xs text-muted">Saldo di chiusura letto: {money(stage.result.latestBalance.amount)} al {shortDate(stage.result.latestBalance.date)}</p>}
         <DraftTable drafts={drafts} onFlip={flip} />
         <div className="mt-auto flex flex-wrap justify-end gap-2 pt-5">
           <Button variant="ghost" onClick={onCancel}>
             Annulla
           </Button>
-          <Button disabled={!drafts.length} onClick={() => commit(drafts)}>
+          <Button disabled={!drafts.length} onClick={() => commit(drafts, included.size === 1 && included.has(sections.find((x) => x.includeByDefault)?.name ?? '') ? stage.result.latestBalance : undefined, stage.result.holder)}>
             <Check size={16} /> Importa {drafts.length} movimenti
           </Button>
         </div>
