@@ -15,11 +15,11 @@ npm run build      # build statica in dist/, pubblicabile su qualsiasi hosting
 
 ## Pubblicare su Netlify
 
-Il repository contiene già `netlify.toml` (build `npm run build`, cartella `dist`, Node 22) e una Content Security Policy che impedisce alla pagina di caricare script esterni o di inviare dati a qualsiasi server (`connect-src 'self'`).
+`netlify.toml` imposta la build (`npm run build`, cartella `dist`, Node 22). Gli header di sicurezza stanno in `public/_headers`, che finisce dentro `dist`: valgono quindi con entrambi i metodi. La Content Security Policy impedisce alla pagina di caricare script esterni e di inviare dati a qualsiasi server (`connect-src 'self'`).
 
 **Con GitHub (consigliato, si aggiorna a ogni push):** su Netlify, *Add new site → Import an existing project → GitHub*, scegli il repository e il branch da pubblicare. Build command e publish directory vengono letti da `netlify.toml`.
 
-**Senza GitHub:** `npm install && npm run build`, poi trascina la cartella `dist` su [app.netlify.com/drop](https://app.netlify.com/drop). In questo caso gli header di sicurezza di `netlify.toml` non vengono applicati: aggiungi un file `dist/_headers` oppure usa il metodo con GitHub.
+**Senza GitHub:** `npm install && npm run build`, poi trascina la cartella `dist` su [app.netlify.com/drop](https://app.netlify.com/drop).
 
 ## Cosa fa
 
