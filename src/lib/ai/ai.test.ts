@@ -17,7 +17,7 @@ afterEach(() => vi.unstubAllGlobals())
 
 describe('local tools', () => {
   it('never returns raw bank descriptions', () => {
-    const out = JSON.stringify(runTool('cerca_movimenti', JSON.stringify({ cerca: '', categoria: '', tipo: 'tutti', dal: '', al: '', limite: 50 }), ctx))
+    const out = JSON.stringify(runTool('cerca_movimenti', JSON.stringify({ cerca: 'esselunga', categoria: '', tipo: 'tutti', dal: '', al: '', limite: 50 }), ctx))
     expect(out).not.toMatch(/PAGAMENTO POS|ADDEBITO SDD|BONIFICO/)
     expect(out).toContain('Esselunga')
   })

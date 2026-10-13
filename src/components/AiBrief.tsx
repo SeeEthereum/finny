@@ -1,5 +1,5 @@
 import { get, set } from 'idb-keyval'
-import { ArrowRight, Database, MessageCircle, RefreshCw } from 'lucide-react'
+import { ChevronRight, Database, MessageCircle, RefreshCw } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { briefFingerprint, generateBrief, type StoredBrief } from '../lib/ai/brief'
@@ -13,7 +13,6 @@ import { Orb, TONE } from './Vocina'
 
 const KEY = 'finny:ai:brief:v1'
 const LABELS: Record<string, string> = { ...TOOL_LABELS, segnali: 'Segnali già calcolati da Finny' }
-const VIEW_LABEL: Record<string, string> = { movimenti: 'Movimenti', analisi: 'Analisi', abbonamenti: 'Ricorrenti', budget: 'Budget' }
 
 /**
  * The AI's monthly read of the dashboard. Generated once per change in the data (or on request)
@@ -73,13 +72,12 @@ export function AiBrief() {
 
   return (
     <Card className="overflow-hidden p-5 sm:p-6">
-      <div className="pointer-events-none absolute -top-32 -left-24 size-80 rounded-full bg-accent/10 blur-3xl" />
       <div className="flex items-start gap-4 sm:gap-5">
         <Orb speaking={busy} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="eyebrow">Il punto della vocina</span>
-            <span className="rounded-full border border-accent/40 bg-accent-soft px-2 py-0.5 text-[11px] font-semibold text-accent">AI</span>
+            <span className="rounded-full bg-ink px-2 py-0.5 text-[11px] font-semibold text-ink-fg">AI</span>
             {stale && stored && !busy && <span className="text-[11px] text-muted">i dati sono cambiati</span>}
           </div>
           <AnimatePresence mode="wait">
@@ -98,7 +96,7 @@ export function AiBrief() {
               </motion.div>
             ) : brief ? (
               <motion.div key={stored!.createdAt} initial={{ opacity: 0, y: 8, filter: 'blur(6px)' }} animate={{ opacity: busy ? 0.55 : 1, y: 0, filter: 'blur(0px)' }}>
-                <h3 className="mt-2 text-xl font-semibold text-fg sm:text-2xl">{brief.title}</h3>
+                <h3 className="mt-2 text-[24px] text-fg sm:text-[28px]">{brief.title}</h3>
                 <p className="mt-2 max-w-[70ch] text-[15px] text-fg-2">{brief.summary}</p>
               </motion.div>
             ) : (
@@ -110,7 +108,7 @@ export function AiBrief() {
           {error && (
             <div className="mt-3 rounded-xl border border-critical/40 bg-critical/10 px-3 py-2 text-sm text-fg">
               {error}{' '}
-              <button onClick={() => void run()} className="font-semibold text-accent">
+              <button onClick={() => void run()} className="font-semibold text-accent-text">
                 Riprova
               </button>
             </div>
@@ -119,30 +117,32 @@ export function AiBrief() {
       </div>
 
       {brief && brief.points.length > 0 && (
-        <motion.div variants={stagger.container} initial="hidden" animate="show" className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <motion.ul variants={stagger.container} initial="hidden" animate="show" className="mt-5 space-y-2">
           {brief.points.map((p, i) => {
             const tone = TONE[p.tone]
             const Icon = tone.icon
+            const circle = p.tone === 'good' ? 'bg-good text-white' : p.tone === 'info' ? 'bg-surface-3 text-fg' : 'bg-accent text-accent-ink'
             return (
-              <motion.div key={`${stored!.createdAt}-${i}`} variants={stagger.item} className="flex flex-col rounded-2xl border border-line bg-surface/60 p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold" style={{ color: tone.text }}>
-                    <Icon size={14} style={{ color: tone.color }} aria-hidden /> {tone.label}
+              <motion.li key={`${stored!.createdAt}-${i}`} variants={stagger.item}>
+                <button
+                  disabled={!p.action}
+                  onClick={() => p.action && go(p.action)}
+                  className="group flex w-full items-center gap-4 rounded-[22px] bg-surface-2 px-4 py-3.5 text-left transition-colors enabled:hover:bg-surface-3"
+                >
+                  <span className={cx('grid size-11 shrink-0 place-items-center rounded-full', circle)} aria-label={tone.label}>
+                    <Icon size={19} />
                   </span>
-                  {p.monthlySaving && <span className="text-sm font-semibold text-accent">−{money(p.monthlySaving, { round: true })}/mese</span>}
-                </div>
-                <div className="mt-2 font-semibold text-fg">{p.title}</div>
-                <p className="mt-1 flex-1 text-sm text-fg-2">{p.text}</p>
-                {p.action && (
-                  <button onClick={() => go(p.action!)} className="group mt-3 inline-flex items-center gap-1 self-start text-sm font-semibold text-accent">
-                    Apri {VIEW_LABEL[p.action] ?? p.action}
-                    <ArrowRight size={14} className="transition-transform group-hover:translate-x-1" />
-                  </button>
-                )}
-              </motion.div>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[16px] font-medium text-fg">{p.title}</span>
+                    <span className="mt-0.5 block text-[14px] text-fg-2">{p.text}</span>
+                  </span>
+                  {p.monthlySaving && <span className="figure shrink-0 text-[15px] text-accent-text">−{money(p.monthlySaving, { round: true })}/mese</span>}
+                  {p.action && <ChevronRight size={18} className="shrink-0 text-muted transition-transform group-hover:translate-x-0.5" />}
+                </button>
+              </motion.li>
             )
           })}
-        </motion.div>
+        </motion.ul>
       )}
 
       {stored && (
@@ -153,7 +153,7 @@ export function AiBrief() {
                 ask(brief.question)
                 go('chiedi')
               }}
-              className="group inline-flex min-w-0 items-center gap-2 rounded-full border border-line px-3 py-1.5 text-left text-sm text-fg-2 transition-colors hover:border-accent/50 hover:text-fg"
+              className="group inline-flex min-w-0 items-center gap-2 rounded-full bg-surface-2 px-3.5 py-2 text-left text-sm text-fg transition-colors hover:bg-surface-3"
             >
               <MessageCircle size={14} className="shrink-0 text-accent" />
               <span className="truncate">{brief.question}</span>
@@ -172,7 +172,7 @@ export function AiBrief() {
                     <div className="font-medium text-fg-2">
                       {LABELS[s.tool] ?? s.tool} <span className="font-mono text-muted">{JSON.stringify(s.args)}</span>
                     </div>
-                    <pre className="mt-1 max-h-28 overflow-auto rounded-lg bg-bg-2 p-2 font-mono text-[11px] whitespace-pre-wrap">{s.result}</pre>
+                    <pre className="mt-1 max-h-28 overflow-auto rounded-lg bg-surface-2 p-2 font-mono text-[11px] whitespace-pre-wrap">{s.result}</pre>
                   </div>
                 ))}
               </div>

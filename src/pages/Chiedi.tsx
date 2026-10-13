@@ -57,7 +57,7 @@ function Rich({ text }: { text: string }) {
 function Shared({ turn }: { turn: Turn }) {
   if (!turn.shared?.length) return <div className="mt-2 text-xs text-muted">Nessun dato inviato per questa risposta.</div>
   return (
-    <details className="mt-3 rounded-xl border border-line bg-bg-2/60 text-xs">
+    <details className="mt-3 rounded-2xl border border-transparent bg-surface-2/60 text-xs">
       <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 text-muted hover:text-fg-2">
         <Database size={13} /> Dati inviati: {[...new Set(turn.shared.map((s) => TOOL_LABELS[s.tool] ?? s.tool))].join(', ').toLowerCase()}
       </summary>
@@ -223,7 +223,7 @@ export default function Chiedi() {
             {turns.map((t, i) =>
               t.role === 'user' ? (
                 <motion.div key={i} initial={{ opacity: 0, y: 10, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} className="flex justify-end">
-                  <div className="max-w-[85%] rounded-[20px] rounded-br-md bg-accent px-4 py-2.5 text-[15px] text-accent-ink">{t.text}</div>
+                  <div className="max-w-[85%] rounded-[22px] rounded-br-md bg-ink px-4 py-2.5 text-[15px] text-ink-fg">{t.text}</div>
                 </motion.div>
               ) : (
                 <motion.div key={i} initial={{ opacity: 0, y: 14, filter: 'blur(6px)' }} animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }} className="flex gap-3">
@@ -279,7 +279,7 @@ export default function Chiedi() {
                 <Square size={15} />
               </button>
             ) : (
-              <motion.button whileTap={{ scale: 0.9 }} type="submit" aria-label="Invia" disabled={!input.trim()} className="grid size-11 place-items-center rounded-full bg-accent text-accent-ink disabled:opacity-40">
+              <motion.button whileTap={{ scale: 0.9 }} type="submit" aria-label="Invia" disabled={!input.trim()} className="grid size-11 place-items-center rounded-full bg-ink text-ink-fg disabled:opacity-40">
                 <ArrowUp size={18} />
               </motion.button>
             )}

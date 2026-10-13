@@ -73,7 +73,7 @@ export default function Impostazioni() {
               Movimenti, regole e budget sono salvati solo in questo browser, nel suo database locale (IndexedDB). Finny non ha un server: i dati escono dal browser solo se attivi l'assistente AI, e solo quelli che servono a ogni risposta. Se cancelli i dati del sito o cambi dispositivo, ti serve un backup.
             </p>
           </div>
-          <div className="mt-4 flex items-center gap-2 rounded-xl border border-line bg-bg-2 px-3 py-2 text-sm">
+          <div className="mt-4 flex items-center gap-2 rounded-2xl border border-transparent bg-surface-2 px-3 py-2 text-sm">
             <span className={`size-2 rounded-full ${s.persistent ? 'bg-good' : 'bg-warning'}`} />
             <span className="text-fg-2">{s.persistent ? 'Salvataggio locale attivo' : 'Questo browser non permette di salvare: i dati spariranno chiudendo la pagina'}</span>
           </div>

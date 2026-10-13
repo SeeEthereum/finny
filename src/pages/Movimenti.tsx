@@ -69,9 +69,9 @@ export default function Movimenti() {
         <AiCategorize />
       </PageHeader>
 
-      <Card className="sticky top-[calc(env(safe-area-inset-top,0px)+62px)] z-20 p-3 backdrop-blur-xl sm:p-4 lg:top-4">
+      <Card className="sticky top-[calc(env(safe-area-inset-top,0px)+10px)] z-20 p-3 sm:p-4 lg:top-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-          <label className="flex flex-1 items-center gap-2 rounded-xl border border-line bg-bg-2 px-3 focus-within:border-accent/60">
+          <label className="flex flex-1 items-center gap-2 rounded-2xl border border-transparent bg-surface-2 px-3 focus-within:border-accent/60">
             <Search size={16} className="text-muted" />
             <input
               id="tx-search"
@@ -129,11 +129,11 @@ export default function Movimenti() {
                   setLimit(PAGE)
                 }}
                 className={cx(
-                  'relative shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-                  active ? 'border-transparent text-accent-ink' : 'border-line text-fg-2 hover:text-fg',
+                  'relative shrink-0 rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors',
+                  active ? 'text-ink-fg' : 'bg-surface-2 text-fg-2 hover:text-fg',
                 )}
               >
-                {active && <motion.span layoutId="cat-chip" className="absolute inset-0 rounded-full bg-accent" transition={{ type: 'spring', stiffness: 400, damping: 32 }} />}
+                {active && <motion.span layoutId="cat-chip" className="absolute inset-0 rounded-full bg-ink" transition={{ type: 'spring', stiffness: 400, damping: 32 }} />}
                 <span className="relative">{c.label}</span>
               </button>
             )
@@ -152,7 +152,7 @@ export default function Movimenti() {
                 setAccount('all')
                 setKind('all')
               }}
-              className="ml-3 text-xs font-semibold text-accent"
+              className="ml-3 text-xs font-semibold text-accent-text"
             >
               Azzera filtri
             </button>
@@ -174,8 +174,8 @@ export default function Movimenti() {
               animate={{ opacity: 1, y: 0, transition: { delay: Math.min(gi, 8) * 0.035 } }}
               exit={{ opacity: 0 }}
             >
-              <div className="mb-1 flex items-center justify-between px-3 text-xs">
-                <span className="font-semibold text-fg-2 capitalize">{dayLabel(g.day)}</span>
+              <div className="mb-1.5 flex items-center justify-between px-3 text-[13px]">
+                <span className="font-medium text-fg-2 capitalize">{dayLabel(g.day)}</span>
                 <span className="text-muted tabular-nums">{money(g.total, { sign: true })}</span>
               </div>
               <Card className="p-1.5">
@@ -232,9 +232,9 @@ function TxSheet({ tx, onClose }: { tx: Transaction | null; onClose: () => void 
               <div className="truncate text-lg font-semibold text-fg">{live.merchant}</div>
               <div className="text-sm text-muted capitalize">{dayLabel(live.date)}</div>
             </div>
-            <div className={cx('ml-auto text-2xl font-semibold tabular-nums', live.amount > 0 ? 'text-good-text' : 'text-fg')}>{money(live.amount, { sign: true })}</div>
+            <div className={cx('figure ml-auto text-[26px] tabular-nums', live.amount > 0 ? 'text-good-text' : 'text-fg')}>{money(live.amount, { sign: true })}</div>
           </div>
-          <dl className="mt-5 grid gap-3 rounded-2xl border border-line bg-bg-2 p-4 text-sm">
+          <dl className="mt-5 grid gap-3 rounded-2xl border border-line bg-surface-2 p-4 text-sm">
             <div>
               <dt className="eyebrow">Causale originale</dt>
               <dd className="mt-1 font-mono text-[13px] break-words text-fg-2">{live.description}</dd>
@@ -258,8 +258,8 @@ function TxSheet({ tx, onClose }: { tx: Transaction | null; onClose: () => void 
                     toast(all && n > 1 ? `${n} movimenti spostati in ${c.label}. Userò questa regola anche per i prossimi import.` : `Categoria aggiornata: ${c.label}`)
                   }}
                   className={cx(
-                    'flex flex-col items-center gap-1 rounded-xl border p-2 text-center text-[11px] leading-tight transition-colors',
-                    active ? 'border-accent bg-accent-soft text-fg' : 'border-line text-fg-2 hover:border-line-strong hover:text-fg',
+                    'flex flex-col items-center gap-1 rounded-2xl border p-2 text-center text-[11px] leading-tight transition-colors',
+                    active ? 'border-ink bg-surface-2 text-fg' : 'border-line text-fg-2 hover:border-line-strong hover:text-fg',
                   )}
                 >
                   <c.icon size={16} className={active ? 'text-accent' : ''} />

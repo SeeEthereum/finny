@@ -63,7 +63,7 @@ export function AiCategorize({ auto = false }: { auto?: boolean }) {
     <>
       <button
         onClick={run}
-        className="group inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-accent-soft px-3 py-1 text-xs font-semibold text-accent transition-colors hover:bg-accent/20"
+        className="group inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-accent-soft px-3 py-1 text-xs font-semibold text-accent-text transition-colors hover:bg-accent/20"
       >
         <Wand2 size={13} className="transition-transform group-hover:rotate-12" />
         Sistema {pending} esercenti generici con l'AI
@@ -82,7 +82,7 @@ export function AiCategorize({ auto = false }: { auto?: boolean }) {
                 const on = picked.has(p.merchant)
                 return (
                   <motion.li key={p.merchant} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: Math.min(i, 12) * 0.03 }}>
-                    <label className={cx('flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 transition-colors', on ? 'border-accent/50 bg-accent-soft' : 'border-line')}>
+                    <label className={cx('flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 transition-colors', on ? 'border-ink bg-surface-2' : 'border-line')}>
                       <input
                         type="checkbox"
                         checked={on}

@@ -105,7 +105,7 @@ export function AiSetup({ compact = false }: { compact?: boolean }) {
             void verify()
           }}
         >
-          <div className="rounded-2xl border border-line bg-bg-2 p-4 text-sm text-fg-2">
+          <div className="rounded-2xl border border-line bg-surface-2 p-4 text-sm text-fg-2">
             <div className="flex items-center gap-2 font-semibold text-fg">
               <Server size={16} className="text-accent" /> Una volta sola, su Netlify
             </div>
@@ -129,7 +129,7 @@ export function AiSetup({ compact = false }: { compact?: boolean }) {
                 autoComplete="off"
                 value={pass}
                 onChange={(e) => setPass(e.target.value)}
-                className="h-11 rounded-xl border border-line bg-bg-2 px-3 text-fg outline-none focus:border-accent/60"
+                className="h-11 rounded-2xl border border-transparent bg-surface-2 px-3 text-fg outline-none focus:border-accent/60"
               />
             </label>
           ) : (
@@ -153,7 +153,7 @@ export function AiSetup({ compact = false }: { compact?: boolean }) {
       >
         <label className="flex flex-col gap-1 text-sm text-fg-2">
           Chiave API di OpenAI
-          <div className="flex items-center gap-2 rounded-xl border border-line bg-bg-2 px-3 focus-within:border-accent/60">
+          <div className="flex items-center gap-2 rounded-2xl border border-transparent bg-surface-2 px-3 focus-within:border-accent/60">
             <KeyRound size={15} className="text-muted" />
             <input
               id="ai-key"
@@ -178,7 +178,7 @@ export function AiSetup({ compact = false }: { compact?: boolean }) {
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
               placeholder={DEFAULT_BASE_URL}
-              className="h-11 rounded-xl border border-line bg-bg-2 px-3 font-mono text-sm text-fg outline-none focus:border-accent/60"
+              className="h-11 rounded-2xl border border-transparent bg-surface-2 px-3 font-mono text-sm text-fg outline-none focus:border-accent/60"
             />
             <span className="text-xs text-muted">Per esempio un modello locale con Ollama: http://localhost:11434/v1. In quel caso i dati non escono dal computer.</span>
           </label>
@@ -217,7 +217,7 @@ export function AiSetup({ compact = false }: { compact?: boolean }) {
               id="ai-model"
               value={ai.model}
               onChange={(e) => ai.update({ model: e.target.value })}
-              className="h-11 rounded-xl border border-line bg-bg-2 px-3 text-fg outline-none focus:border-accent/60"
+              className="h-11 rounded-2xl border border-transparent bg-surface-2 px-3 text-fg outline-none focus:border-accent/60"
             >
               {ai.models.map((m) => (
                 <option key={m} value={m}>
@@ -237,7 +237,7 @@ export function AiSetup({ compact = false }: { compact?: boolean }) {
                 key={o.t}
                 type="button"
                 onClick={() => ai.update({ shareMerchants: o.v })}
-                className={cx('rounded-xl border px-3 py-2 text-left transition-colors', ai.shareMerchants === o.v ? 'border-accent bg-accent-soft' : 'border-line hover:border-line-strong')}
+                className={cx('rounded-xl border px-3 py-2 text-left transition-colors', ai.shareMerchants === o.v ? 'border-ink bg-surface-2' : 'border-line hover:border-line-strong')}
               >
                 <div className="font-medium text-fg">{o.t}</div>
                 <div className="text-xs text-muted">{o.d}</div>
@@ -269,7 +269,7 @@ function Check({ ok, children }: { ok: boolean | null; children: ReactNode }) {
 /** What the Netlify Function reported, as a checklist with the fix for each failing line */
 function Diagnosis({ status, error }: { status: ServerStatus | null; error: string }) {
   return (
-    <div className="rounded-2xl border border-line bg-bg-2 p-4 text-sm text-fg-2">
+    <div className="rounded-2xl border border-line bg-surface-2 p-4 text-sm text-fg-2">
       <div className="mb-2 font-semibold text-fg">Controllo del collegamento</div>
       <ul className="space-y-2">
         <Check ok={!!status}>

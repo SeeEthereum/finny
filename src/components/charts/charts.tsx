@@ -17,7 +17,7 @@ export function CashflowChart({ data, height = 240 }: { data: MonthStat[]; heigh
   const plotW = Math.max(0, width - PAD.left - PAD.right)
   const plotH = height - PAD.top - PAD.bottom
   const band = plotW / Math.max(1, data.length)
-  const barW = Math.min(24, Math.max(3, (band - 10) / 2 - 1))
+  const barW = Math.min(22, Math.max(4, (band - 12) / 2 - 2))
   const y = (v: number) => PAD.top + plotH - (v / top) * plotH
   const showEvery = band < 30 ? 2 : 1
 
@@ -35,14 +35,14 @@ export function CashflowChart({ data, height = 240 }: { data: MonthStat[]; heigh
           ))}
           {data.map((d, i) => {
             const cx = PAD.left + band * i + band / 2
-            const x1 = cx - barW - 1
-            const x2 = cx + 1
+            const x1 = cx - barW - 2
+            const x2 = cx + 2
             const active = hover === i
             return (
               <g key={d.key} opacity={hover == null || active ? 1 : 0.45} style={{ transition: 'opacity .2s' }}>
-                <rect x={PAD.left + band * i} y={PAD.top} width={band} height={plotH} fill={active ? 'var(--accent-soft)' : 'transparent'} rx={8} />
+                <rect x={PAD.left + band * i + 2} y={PAD.top} width={band - 4} height={plotH} fill={active ? 'var(--surface-2)' : 'transparent'} rx={14} />
                 <motion.path
-                  d={columnPath(x1, y(d.income), barW, y(0) - y(d.income))}
+                  d={columnPath(x1, y(d.income), barW, y(0) - y(d.income), barW / 2)}
                   fill="var(--series-1)"
                   initial={reduce ? false : { scaleY: 0 }}
                   animate={{ scaleY: 1 }}
@@ -50,7 +50,7 @@ export function CashflowChart({ data, height = 240 }: { data: MonthStat[]; heigh
                   style={{ originY: 1 }}
                 />
                 <motion.path
-                  d={columnPath(x2, y(d.expenses), barW, y(0) - y(d.expenses))}
+                  d={columnPath(x2, y(d.expenses), barW, y(0) - y(d.expenses), barW / 2)}
                   fill="var(--series-2)"
                   initial={reduce ? false : { scaleY: 0 }}
                   animate={{ scaleY: 1 }}
@@ -240,9 +240,51 @@ export function PaceChart({ current, average, today, height = 220 }: { current: 
   )
 }
 
-/** 50/30/20 as a single stacked bar with the recommended split marked underneath */
-export function SplitBar({ needs, wants, savings }: { needs: number; wants: number; savings: number }) {
+export interface Share {
+  label: string
+  value: number
+  color: string
+}
+
+/**
+ * "Share by group": one bar of rounded segments separated by gaps, with a dot legend
+ * carrying the amounts. Small slices keep a minimum width so they stay visible.
+ */
+export function ShareBar({ items, height = 14, legend = true }: { items: Share[]; height?: number; legend?: boolean }) {
   const reduce = useReducedMotion()
+  const shown = items.filter((x) => x.value > 0)
+  const total = shown.reduce((a, x) => a + x.value, 0) || 1
+  return (
+    <div>
+      <div className="flex w-full gap-1" style={{ height }} role="img" aria-label={shown.map((x) => `${x.label} ${money(x.value, { round: true })}`).join(', ')}>
+        {shown.map((x, i) => (
+          <motion.div
+            key={x.label}
+            className="h-full rounded-full"
+            style={{ background: x.color, minWidth: height }}
+            initial={reduce ? false : { flexGrow: 0.0001 }}
+            animate={{ flexGrow: x.value / total }}
+            transition={{ delay: 0.15 + i * 0.08, type: 'spring', stiffness: 70, damping: 18 }}
+            title={`${x.label}: ${money(x.value)}`}
+          />
+        ))}
+      </div>
+      {legend && (
+        <div className="mt-3.5 flex flex-wrap gap-x-5 gap-y-1.5 text-[14px]">
+          {shown.map((x) => (
+            <span key={x.label} className="inline-flex items-center gap-2 text-fg-2">
+              <span className="size-2.5 rounded-full" style={{ background: x.color }} />
+              {x.label} <span className="text-fg tabular-nums">{money(x.value, { round: true })}</span>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** 50/30/20 as a share bar, with the recommended split under each part */
+export function SplitBar({ needs, wants, savings }: { needs: number; wants: number; savings: number }) {
   const total = needs + wants + savings || 1
   const parts = [
     { key: 'Necessità', v: needs, color: 'var(--series-1)', target: 0.5 },
@@ -251,38 +293,65 @@ export function SplitBar({ needs, wants, savings }: { needs: number; wants: numb
   ]
   return (
     <div>
-      <div className="flex h-4 w-full gap-[2px] overflow-hidden rounded-full">
-        {parts.map((p, i) => (
-          <motion.div
-            key={p.key}
-            className="h-full first:rounded-l-full last:rounded-r-full"
-            style={{ background: p.color }}
-            initial={reduce ? false : { width: 0 }}
-            animate={{ width: `${(p.v / total) * 100}%` }}
-            transition={{ delay: 0.2 + i * 0.12, type: 'spring', stiffness: 80, damping: 18 }}
-            title={`${p.key}: ${Math.round((p.v / total) * 100)}%`}
-          />
-        ))}
-      </div>
-      <div className="relative mt-1 h-3" aria-hidden>
-        {[0.5, 0.8].map((m) => (
-          <span key={m} className="absolute top-0 h-2 w-px bg-muted" style={{ left: `${m * 100}%` }} />
-        ))}
-      </div>
-      <div className="mt-2 grid grid-cols-3 gap-3">
+      <ShareBar items={parts.map((p) => ({ label: p.key, value: p.v, color: p.color }))} legend={false} />
+      <div className="mt-4 grid grid-cols-3 gap-3">
         {parts.map((p) => (
           <div key={p.key} className="min-w-0">
-            <div className="flex items-center gap-1.5 text-xs text-fg-2">
-              <span className="size-2.5 rounded-[3px]" style={{ background: p.color }} />
+            <div className="flex items-center gap-1.5 text-[13px] text-fg-2">
+              <span className="size-2.5 rounded-full" style={{ background: p.color }} />
               {p.key}
             </div>
-            <div className="mt-1 text-xl font-semibold text-fg">{Math.round((p.v / total) * 100)}%</div>
+            <div className="figure mt-1 text-[26px] text-fg">{Math.round((p.v / total) * 100)}%</div>
             <div className="text-xs text-muted">
               obiettivo {Math.round(p.target * 100)}% · {money(p.v, { round: true })}
             </div>
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+/**
+ * "Where it goes each month": a pill track per item with a filled pill rising from the bottom
+ * and a dark tag carrying the amount. The last item can be set apart in ink ("Altro").
+ */
+export function PillBars({ items, height = 210, onSelect }: { items: { key: string; label: string; value: number; ink?: boolean }[]; height?: number; onSelect?: (key: string) => void }) {
+  const reduce = useReducedMotion()
+  const max = Math.max(1, ...items.map((x) => x.value))
+  const track = height - 30
+  return (
+    <div className="flex items-end gap-2.5 sm:gap-3" style={{ height }}>
+      {items.map((x, i) => {
+        const fill = Math.max(0.12, x.value / max) * (track - 34)
+        return (
+          <button
+            key={x.key}
+            onClick={onSelect ? () => onSelect(x.key) : undefined}
+            className="group flex min-w-0 flex-1 flex-col items-center gap-2"
+            aria-label={`${x.label}: ${money(x.value)}`}
+          >
+            <div className="relative w-full max-w-[84px] rounded-[999px] bg-track" style={{ height: track }}>
+              <motion.div
+                className="absolute inset-x-0 bottom-0 rounded-[999px]"
+                style={{ background: x.ink ? 'var(--series-1)' : 'var(--accent)' }}
+                initial={reduce ? false : { height: 0 }}
+                animate={{ height: fill }}
+                transition={{ delay: 0.15 + i * 0.07, type: 'spring', stiffness: 90, damping: 17 }}
+              />
+              <motion.span
+                className="figure absolute left-1/2 -translate-x-1/2 rounded-full bg-ink px-2 py-0.5 text-[12px] whitespace-nowrap text-ink-fg"
+                initial={reduce ? false : { bottom: 0, opacity: 0 }}
+                animate={{ bottom: fill - 12, opacity: 1 }}
+                transition={{ delay: 0.15 + i * 0.07, type: 'spring', stiffness: 90, damping: 17 }}
+              >
+                {money(x.value, { round: true })}
+              </motion.span>
+            </div>
+            <span className="max-w-full truncate text-[13px] text-fg-2 group-hover:text-fg">{x.label}</span>
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -298,21 +367,20 @@ export function WeekdayChart({ values, height = 180 }: { values: number[]; heigh
   const peak = vs.indexOf(max)
   const plotH = height - 42
   const band = width / 7
-  const barW = Math.min(24, band - 8)
+  const barW = Math.min(28, band - 10)
   return (
     <div ref={ref} className="w-full" style={{ height }}>
       {width > 0 && (
         <svg width={width} height={height} role="img" aria-label="Spesa media per giorno della settimana">
-          <line x1={0} x2={width} y1={plotH + 18} y2={plotH + 18} stroke="var(--axis)" />
           {vs.map((v, i) => {
             const h = (v / max) * plotH
             const x = band * i + (band - barW) / 2
             return (
               <g key={labels[i]}>
                 <motion.path
-                  d={columnPath(x, plotH + 18 - h, barW, h)}
+                  d={columnPath(x, plotH + 18 - h, barW, h, barW / 2)}
                   fill={i === peak ? 'var(--series-2)' : 'var(--series-1)'}
-                  opacity={i === peak ? 1 : 0.55}
+                  opacity={i === peak ? 1 : 0.18}
                   initial={reduce ? false : { scaleY: 0 }}
                   animate={{ scaleY: 1 }}
                   transition={{ delay: 0.1 + i * 0.05, type: 'spring', stiffness: 140, damping: 18 }}
@@ -333,23 +401,27 @@ export function WeekdayChart({ values, height = 180 }: { values: number[]; heigh
   )
 }
 
-/** Budget meter: the arc turns warning at 85% and critical past 100% */
-export function BudgetRing({ spent, budget, size = 64 }: { spent: number; budget: number; size?: number }) {
+/**
+ * Countdown/meter ring: a track of small ticks with a rounded arc on top. Used for budgets
+ * (warning at 85%, critical past 100%) and for days left before a charge.
+ */
+export function BudgetRing({ spent, budget, size = 64, color }: { spent: number; budget: number; size?: number; color?: string }) {
   const reduce = useReducedMotion()
   const ratio = budget > 0 ? spent / budget : 0
-  const r = size / 2 - 5
+  const stroke = Math.max(4, size / 13)
+  const r = size / 2 - stroke
   const c = 2 * Math.PI * r
-  const color = ratio > 1 ? 'var(--critical)' : ratio > 0.85 ? 'var(--warning)' : 'var(--accent)'
+  const arc = color ?? (ratio > 1 ? 'var(--critical)' : ratio > 0.85 ? 'var(--warning)' : 'var(--series-1)')
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90" aria-hidden>
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--accent-soft)" strokeWidth={6} />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--line-strong)" strokeWidth={stroke * 0.7} strokeDasharray={`1.2 ${(c / 48 - 1.2).toFixed(2)}`} strokeLinecap="round" />
       <motion.circle
         cx={size / 2}
         cy={size / 2}
         r={r}
         fill="none"
-        stroke={color}
-        strokeWidth={6}
+        stroke={arc}
+        strokeWidth={stroke}
         strokeLinecap="round"
         strokeDasharray={c}
         initial={reduce ? false : { strokeDashoffset: c }}

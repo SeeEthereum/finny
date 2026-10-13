@@ -134,7 +134,7 @@ export default function Importa() {
                   <p className="mt-1 text-sm text-fg-2">
                     Il problema è nella lettura del file, prima ancora di cercare i movimenti. Se il file si apre normalmente sul tuo computer, il dettaglio qui sotto mi serve per capire cosa non va: non contiene dati del conto.
                   </p>
-                  <pre className="mt-3 overflow-x-auto rounded-xl border border-line bg-bg-2 p-3 font-mono text-xs whitespace-pre-wrap text-fg-2">{stage.detail}</pre>
+                  <pre className="mt-3 overflow-x-auto rounded-2xl border border-transparent bg-surface-2 p-3 font-mono text-xs whitespace-pre-wrap text-fg-2">{stage.detail}</pre>
                   <div className="mt-4 flex flex-wrap gap-2">
                     <CopyButton text={`Finny · errore import · ${stage.detail} · ${navigator.userAgent}`} label="Copia dettaglio" />
                     <Button onClick={() => setStage({ kind: 'idle' })}>Riprova con un altro file</Button>
@@ -181,7 +181,7 @@ function DropZone({ onFiles }: { onFiles: (f: File[]) => void }) {
       >
         <div className="relative">
           <motion.div
-            className="grid size-20 place-items-center rounded-[24px] border border-accent/40 bg-accent-soft text-accent"
+            className="grid size-20 place-items-center rounded-full bg-accent text-accent-ink"
             animate={reduce ? undefined : over ? { y: -8, rotate: -4 } : { y: [0, -6, 0] }}
             transition={over ? { type: 'spring' } : { duration: 3, repeat: Infinity, ease: 'easeInOut' }}
           >
@@ -191,7 +191,7 @@ function DropZone({ onFiles }: { onFiles: (f: File[]) => void }) {
             [FileSpreadsheet, FileText].map((Icon, i) => (
               <motion.div
                 key={i}
-                className="absolute top-3 grid size-10 place-items-center rounded-xl border border-line bg-surface-2 text-fg-2"
+                className="absolute top-3 grid size-10 place-items-center rounded-full bg-surface-2 text-fg-2 shadow-[var(--shadow)]"
                 style={{ [i ? 'right' : 'left']: -44 }}
                 animate={{ y: [0, i ? 6 : -6, 0], rotate: i ? 8 : -8 }}
                 transition={{ duration: 3.4, repeat: Infinity, ease: 'easeInOut', delay: i * 0.4 }}
@@ -202,9 +202,9 @@ function DropZone({ onFiles }: { onFiles: (f: File[]) => void }) {
         </div>
         <div className="mt-6 font-display text-2xl font-semibold text-fg">{over ? 'Lascia pure qui' : 'Trascina qui il tuo estratto conto'}</div>
         <p className="mt-2 max-w-md text-sm text-fg-2">
-          oppure <span className="font-semibold text-accent">sfoglia i file</span>. CSV ed Excel (.xlsx) danno i risultati migliori; il PDF funziona se contiene testo.
+          oppure <span className="font-semibold text-accent-text">sfoglia i file</span>. CSV ed Excel (.xlsx) danno i risultati migliori; il PDF funziona se contiene testo.
         </p>
-        <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-line bg-bg-2 px-3 py-1.5 text-xs text-fg-2">
+        <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-line bg-surface-2 px-3 py-1.5 text-xs text-fg-2">
           <Lock size={12} className="text-accent" /> Il file resta sul tuo dispositivo. Niente upload, niente server.
         </div>
       </motion.button>
@@ -257,7 +257,7 @@ function PasswordStep({
       <motion.div
         animate={stage.incorrect ? { x: [0, -10, 10, -6, 6, 0] } : undefined}
         transition={{ duration: 0.4 }}
-        className="grid size-14 place-items-center rounded-2xl border border-accent/40 bg-accent-soft text-accent"
+        className="grid size-14 place-items-center rounded-full bg-accent text-accent-ink"
       >
         <KeyRound size={26} />
       </motion.div>
@@ -281,7 +281,7 @@ function PasswordStep({
           onChange={(e) => setPw(e.target.value)}
           placeholder="Password del PDF"
           className={cx(
-            'h-11 flex-1 rounded-xl border bg-bg-2 px-3 text-fg outline-none placeholder:text-muted focus:border-accent/60',
+            'h-11 flex-1 rounded-2xl border bg-surface-2 px-3 text-fg outline-none placeholder:text-muted focus:border-accent/60',
             stage.incorrect ? 'border-critical/60' : 'border-line',
           )}
         />
@@ -318,7 +318,7 @@ function Diagnostic({ stage, onBack }: { stage: Extract<Stage, { kind: 'nothing'
                 <TriangleAlert size={16} className="mt-0.5 shrink-0 text-warning" />
                 Il testo contiene dati personali (nome, IBAN, movimenti). Se lo condividi per farmi sistemare il formato, prima cancella o sostituisci quei dati: bastano 10-15 righe con intestazione e qualche movimento.
               </div>
-              <pre className="scroll-thin mt-3 max-h-[360px] overflow-auto rounded-xl border border-line bg-bg-2 p-3 font-mono text-[11.5px] leading-relaxed whitespace-pre text-fg-2">{sample}</pre>
+              <pre className="scroll-thin mt-3 max-h-[360px] overflow-auto rounded-2xl border border-transparent bg-surface-2 p-3 font-mono text-[11.5px] leading-relaxed whitespace-pre text-fg-2">{sample}</pre>
             </>
           )}
           <div className="mt-4 flex flex-wrap gap-2">
@@ -341,7 +341,7 @@ function Guide() {
     <div className="mt-6 grid gap-3 md:grid-cols-3">
       {steps.map((s, i) => (
         <Card key={s.t} className="p-5">
-          <div className="font-mono text-xs text-accent">Passo {i + 1}</div>
+          <div className="font-mono text-xs text-accent-text">Passo {i + 1}</div>
           <div className="mt-2 font-semibold text-fg">{s.t}</div>
           <p className="mt-1 text-sm text-fg-2">{s.d}</p>
         </Card>
@@ -371,7 +371,7 @@ function AccountPicker({ picker }: { picker: Picker }) {
     <div className="space-y-2">
       <div className="text-sm text-fg-2">Importa in</div>
       {overlaps.map((o) => (
-        <label key={o.account.id} className={cx('flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 text-sm transition-colors', targetId === o.account.id ? 'border-accent/50 bg-accent-soft' : 'border-line')}>
+        <label key={o.account.id} className={cx('flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 text-sm transition-colors', targetId === o.account.id ? 'border-ink bg-surface-2' : 'border-line')}>
           <input type="radio" name="target" checked={targetId === o.account.id} onChange={() => setTarget(o.account.id)} className="accent-[var(--accent)]" />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-fg">{o.account.name}</span>
@@ -379,7 +379,7 @@ function AccountPicker({ picker }: { picker: Picker }) {
           </span>
         </label>
       ))}
-      <label className={cx('flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 text-sm transition-colors', targetId === 'new' ? 'border-accent/50 bg-accent-soft' : 'border-line')}>
+      <label className={cx('flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 text-sm transition-colors', targetId === 'new' ? 'border-ink bg-surface-2' : 'border-line')}>
         <input type="radio" name="target" checked={targetId === 'new'} onChange={() => setTarget('new')} className="accent-[var(--accent)]" />
         <span className="text-fg">Nuovo conto</span>
       </label>
@@ -392,7 +392,7 @@ function AccountPicker({ picker }: { picker: Picker }) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={bank ? `Conto ${bank}` : 'Conto principale'}
-              className="h-11 rounded-xl border border-line bg-bg-2 px-3 text-fg outline-none placeholder:text-muted focus:border-accent/60"
+              className="h-11 rounded-2xl border border-transparent bg-surface-2 px-3 text-fg outline-none placeholder:text-muted focus:border-accent/60"
             />
           </label>
           <label className="flex flex-col gap-1 text-sm text-fg-2">
@@ -402,7 +402,7 @@ function AccountPicker({ picker }: { picker: Picker }) {
               value={bank}
               onChange={(e) => setBank(e.target.value)}
               placeholder="Es. Intesa Sanpaolo"
-              className="h-11 rounded-xl border border-line bg-bg-2 px-3 text-fg outline-none placeholder:text-muted focus:border-accent/60"
+              className="h-11 rounded-2xl border border-transparent bg-surface-2 px-3 text-fg outline-none placeholder:text-muted focus:border-accent/60"
             />
           </label>
         </div>
@@ -540,7 +540,7 @@ function TableReview({
                   value={current ?? ''}
                   onChange={(e) => setField(f.key, e.target.value)}
                   className={cx(
-                    'h-10 min-w-0 rounded-xl border bg-bg-2 px-3 text-fg outline-none focus:border-accent/60',
+                    'h-10 min-w-0 rounded-2xl border bg-surface-2 px-3 text-fg outline-none focus:border-accent/60',
                     current != null ? 'border-accent/40' : 'border-line',
                   )}
                 >
@@ -664,7 +664,7 @@ function DraftTable({ drafts, onFlip }: { drafts: DraftTx[]; onFlip?: (key: stri
         </table>
       </div>
       {drafts.length > 10 && (
-        <button onClick={() => setAll((v) => !v)} className="mt-2 text-xs font-semibold text-accent">
+        <button onClick={() => setAll((v) => !v)} className="mt-2 text-xs font-semibold text-accent-text">
           {all ? 'Mostra meno' : `Mostra tutti i ${drafts.length}`}
         </button>
       )}
@@ -718,7 +718,7 @@ function PdfReview({
             {sections.map((x) => {
               const on = included.has(x.name)
               return (
-                <label key={x.name} className={cx('flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 text-sm transition-colors', on ? 'border-accent/50 bg-accent-soft' : 'border-line')}>
+                <label key={x.name} className={cx('flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 text-sm transition-colors', on ? 'border-ink bg-surface-2' : 'border-line')}>
                   <input
                     type="checkbox"
                     checked={on}

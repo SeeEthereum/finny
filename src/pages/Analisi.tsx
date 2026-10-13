@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react'
 import { PaceChart, SplitBar, WeekdayChart } from '../components/charts/charts'
 import { ChartCard, Legend } from '../components/charts/kit'
 import { CategoryBars, PageHeader } from '../components/shared'
-import { AnimatedNumber, Card, CategoryIcon, SectionTitle, Segmented, stagger } from '../components/ui/primitives'
+import { AnimatedNumber, Avatar, Card, CategoryIcon, SectionTitle, Segmented, stagger } from '../components/ui/primitives'
 import { InsightCard } from '../components/Vocina'
 import {
   bucketSplit, categoryTotals, forecastMonth, inMonth, monthPace, topMerchants, weekdayProfile,
@@ -87,7 +87,7 @@ export default function Analisi() {
           {tiles.map((t) => (
             <Card key={t.label} className="p-4 sm:p-5">
               <div className="text-xs text-fg-2 sm:text-sm">{t.label}</div>
-              <div className="mt-1.5 text-2xl font-semibold text-fg sm:text-3xl">
+              <div className="figure mt-1.5 text-[26px] text-fg sm:text-[32px]">
                 <AnimatedNumber value={t.value} format={t.fmt} />
               </div>
             </Card>
@@ -202,16 +202,16 @@ export default function Analisi() {
             <SectionTitle eyebrow={`Totale ${months} mesi`} title="Dove spendi di più" />
             <ol className="mt-4 space-y-1">
               {data.merchants.map((m, i) => (
-                <li key={m.merchant} className="flex items-center gap-3 rounded-xl px-2 py-2">
+                <li key={m.merchant} className="flex items-center gap-3 px-1 py-2">
                   <span className="w-5 text-right font-mono text-xs text-muted">{i + 1}</span>
-                  <CategoryIcon id={m.category} size={30} />
+                  <Avatar name={m.merchant} size={38} />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium text-fg">{m.merchant}</div>
+                    <div className="truncate text-[15px] font-medium text-fg">{m.merchant}</div>
                     <div className="text-xs text-muted">
                       {m.count} {m.count === 1 ? 'pagamento' : 'pagamenti'} · media {money(m.total / m.count, { round: true })}
                     </div>
                   </div>
-                  <div className="text-sm font-semibold text-fg tabular-nums">{money(m.total, { round: true })}</div>
+                  <div className="figure text-[15px] text-fg tabular-nums">{money(m.total, { round: true })}</div>
                 </li>
               ))}
             </ol>

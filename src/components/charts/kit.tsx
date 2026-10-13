@@ -34,7 +34,8 @@ export const tickFmt = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 0
 export function columnPath(x: number, y: number, w: number, h: number, r = 4) {
   if (h <= 0) return ''
   const rr = Math.min(r, w / 2, h)
-  return `M${x},${y + h}V${y + rr}Q${x},${y} ${x + rr},${y}H${x + w - rr}Q${x + w},${y} ${x + w},${y + rr}V${y + h}Z`
+  // circular arcs, so a radius of w/2 gives a true pill top
+  return `M${x},${y + h}V${y + rr}A${rr},${rr} 0 0 1 ${x + rr},${y}H${x + w - rr}A${rr},${rr} 0 0 1 ${x + w},${y + rr}V${y + h}Z`
 }
 
 export function Legend({ items }: { items: { label: string; color: string; kind?: 'dot' | 'line' }[] }) {
@@ -45,7 +46,7 @@ export function Legend({ items }: { items: { label: string; color: string; kind?
           {it.kind === 'line' ? (
             <span className="h-[2px] w-4 rounded-full" style={{ background: it.color }} />
           ) : (
-            <span className="size-2.5 rounded-[3px]" style={{ background: it.color }} />
+            <span className="size-2.5 rounded-full" style={{ background: it.color }} />
           )}
           {it.label}
         </span>
@@ -61,7 +62,7 @@ export function Tooltip({ x, y, width, children }: { x: number; y: number; width
       initial={{ opacity: 0, scale: 0.96 }}
       animate={{ opacity: 1, scale: 1, left: flip ? x - 12 : x + 12, top: y }}
       transition={{ type: 'spring', stiffness: 500, damping: 36 }}
-      className="pointer-events-none absolute z-10 min-w-[160px] rounded-xl border border-line-strong bg-surface/95 px-3 py-2 text-xs shadow-xl backdrop-blur"
+      className="pointer-events-none absolute z-10 min-w-[170px] rounded-[18px] bg-surface px-3.5 py-2.5 text-xs shadow-[0_16px_40px_-14px_rgb(0_0_0/0.3)]"
       style={{ translateX: flip ? '-100%' : '0%', translateY: '-50%' }}
     >
       {children}
@@ -73,7 +74,7 @@ export function TipRow({ color, label, value }: { color?: string; label: string;
   return (
     <div className="flex items-center justify-between gap-4 py-0.5">
       <span className="inline-flex items-center gap-1.5 text-fg-2">
-        {color && <span className="size-2 rounded-[2px]" style={{ background: color }} />}
+        {color && <span className="size-2 rounded-full" style={{ background: color }} />}
         {label}
       </span>
       <span className="font-semibold text-fg tabular-nums">{value}</span>
@@ -107,7 +108,7 @@ export function ChartCard({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           {eyebrow && <div className="eyebrow mb-1">{eyebrow}</div>}
-          <h3 className="text-lg font-semibold text-fg">{title}</h3>
+          <h3 className="text-[19px] text-fg">{title}</h3>
         </div>
         <div className="flex items-center gap-2">
           {aside}
@@ -136,7 +137,7 @@ export function ChartCard({
           {mode === 'chart' ? (
             chart
           ) : (
-            <div className="scroll-thin max-h-[320px] overflow-auto rounded-xl border border-line">
+            <div className="scroll-thin max-h-[320px] overflow-auto rounded-[18px] bg-surface-2">
               <table className="w-full text-left text-sm">
                 <thead className="sticky top-0 bg-surface-2 text-xs text-muted">
                   <tr>

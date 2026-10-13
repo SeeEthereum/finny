@@ -1,36 +1,39 @@
 import {
-  ChartPie, Command, FileUp, Home, Landmark, ListOrdered, MessageCircle, Monitor, Moon, Repeat, Search, Settings, Sun, Target,
+  ChartPie, ChevronRight, FileUp, Home, Landmark, LayoutGrid, ListOrdered, MessageCircle, Plus, Repeat, Search, Settings, Sparkles, Target,
   type LucideIcon,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { money } from '../lib/format'
 import type { View } from '../lib/insights'
+import { useAiReady } from '../store/ai'
 import { useUi } from '../store/ui'
 import { useFinny } from '../store/useFinny'
-import { Mark, Wordmark } from './ui/Brand'
-import { cx } from './ui/primitives'
+import { Mark } from './ui/Brand'
+import { cx, IconButton } from './ui/primitives'
 
-export const NAV: { id: View; label: string; icon: LucideIcon; mobile?: boolean }[] = [
-  { id: 'home', label: 'Panoramica', icon: Home, mobile: true },
-  { id: 'movimenti', label: 'Movimenti', icon: ListOrdered, mobile: true },
-  { id: 'analisi', label: 'Analisi', icon: ChartPie, mobile: true },
-  { id: 'chiedi', label: 'Chiedi', icon: MessageCircle, mobile: true },
-  { id: 'abbonamenti', label: 'Ricorrenti', icon: Repeat },
-  { id: 'budget', label: 'Budget', icon: Target },
-  { id: 'importa', label: 'Importa', icon: FileUp, mobile: true },
-  { id: 'collega', label: 'Collega conto', icon: Landmark },
-  { id: 'impostazioni', label: 'Impostazioni', icon: Settings },
+export const NAV: { id: View; label: string; short?: string; icon: LucideIcon; dock?: boolean; hint?: string }[] = [
+  { id: 'home', label: 'Panoramica', short: 'Home', icon: Home, dock: true },
+  { id: 'movimenti', label: 'Movimenti', icon: ListOrdered, dock: true },
+  { id: 'abbonamenti', label: 'Ricorrenti', icon: Repeat, dock: true },
+  { id: 'analisi', label: 'Analisi', icon: ChartPie, dock: true },
+  { id: 'chiedi', label: 'Chiedi a Finny', short: 'Chiedi', icon: MessageCircle, hint: "Domande libere all'assistente AI" },
+  { id: 'budget', label: 'Budget', icon: Target, hint: 'Un tetto per ogni categoria' },
+  { id: 'importa', label: 'Importa estratto', short: 'Importa', icon: FileUp, hint: 'CSV, Excel o PDF' },
+  { id: 'collega', label: 'Collega conto', short: 'Collega', icon: Landmark, hint: 'Come funziona il PSD2' },
+  { id: 'impostazioni', label: 'Impostazioni', icon: Settings, hint: 'Tema, AI, backup, conti' },
 ]
 
 type Theme = 'system' | 'light' | 'dark'
+// v2: the redesign is light-first, so an untouched "system" choice from before doesn't carry over
+const THEME_KEY = 'finny:theme:v2'
 
 export function useTheme() {
   const [theme, setTheme] = useState<Theme>(() => {
     try {
-      return (localStorage.getItem('finny:theme') as Theme) || 'system'
+      return (localStorage.getItem(THEME_KEY) as Theme) || 'light'
     } catch {
-      return 'system'
+      return 'light'
     }
   })
   useEffect(() => {
@@ -38,7 +41,7 @@ export function useTheme() {
     if (theme === 'system') root.removeAttribute('data-theme')
     else root.setAttribute('data-theme', theme)
     try {
-      localStorage.setItem('finny:theme', theme)
+      localStorage.setItem(THEME_KEY, theme)
     } catch {
       /* remembered only for this visit */
     }
@@ -46,125 +49,114 @@ export function useTheme() {
   return [theme, setTheme] as const
 }
 
-function ThemeSwitch() {
-  const [theme, setTheme] = useTheme()
-  const opts: { v: Theme; icon: LucideIcon; label: string }[] = [
-    { v: 'light', icon: Sun, label: 'Tema chiaro' },
-    { v: 'system', icon: Monitor, label: 'Tema di sistema' },
-    { v: 'dark', icon: Moon, label: 'Tema scuro' },
+/** Floating dark dock: round buttons, the active one opens into a white pill with its label */
+function Dock() {
+  const view = useFinny((s) => s.view)
+  const go = useFinny((s) => s.go)
+  const [more, setMore] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const main = NAV.filter((n) => n.dock)
+  const secondary = NAV.filter((n) => !n.dock)
+  const current = secondary.find((n) => n.id === view)
+
+  useEffect(() => {
+    if (!more) return
+    const close = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setMore(false)
+    }
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setMore(false)
+    window.addEventListener('pointerdown', close)
+    window.addEventListener('keydown', esc)
+    return () => {
+      window.removeEventListener('pointerdown', close)
+      window.removeEventListener('keydown', esc)
+    }
+  }, [more])
+
+  const items: { id: string; label: string; icon: LucideIcon; active: boolean; onClick: () => void }[] = [
+    ...main.map((n) => ({ id: n.id, label: n.short ?? n.label, icon: n.icon, active: view === n.id, onClick: () => go(n.id) })),
+    { id: 'more', label: current ? (current.short ?? current.label) : 'Altro', icon: current ? current.icon : LayoutGrid, active: !!current, onClick: () => setMore((m) => !m) },
   ]
+
   return (
-    <div className="inline-flex rounded-full border border-line bg-surface p-0.5">
-      {opts.map((o) => (
-        <button
-          key={o.v}
-          aria-label={o.label}
-          aria-pressed={theme === o.v}
-          onClick={() => setTheme(o.v)}
-          className={cx('relative grid size-7 place-items-center rounded-full', theme === o.v ? 'text-accent-ink' : 'text-muted hover:text-fg')}
-        >
-          {theme === o.v && <motion.span layoutId="theme-pill" className="absolute inset-0 rounded-full bg-accent" transition={{ type: 'spring', stiffness: 400, damping: 30 }} />}
-          <o.icon size={14} className="relative" />
-        </button>
-      ))}
+    <div ref={ref} className="fixed inset-x-0 bottom-[calc(14px+env(safe-area-inset-bottom,0px))] z-40 flex justify-center px-3">
+      <AnimatePresence>
+        {more && (
+          <motion.div
+            initial={{ opacity: 0, y: 16, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.97 }}
+            transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+            className="absolute bottom-[calc(100%+10px)] w-[min(92vw,360px)] origin-bottom rounded-[28px] bg-surface p-2 shadow-[0_24px_60px_-20px_rgb(0_0_0/0.35)]"
+          >
+            {secondary.map((n) => (
+              <button
+                key={n.id}
+                onClick={() => {
+                  setMore(false)
+                  go(n.id)
+                }}
+                className={cx('flex w-full items-center gap-3 rounded-[20px] px-3 py-2.5 text-left transition-colors hover:bg-surface-2', view === n.id && 'bg-surface-2')}
+              >
+                <span className="grid size-10 place-items-center rounded-full bg-surface-3 text-fg">
+                  <n.icon size={18} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[15px] font-medium text-fg">{n.label}</span>
+                  <span className="block truncate text-xs text-fg-2">{n.hint}</span>
+                </span>
+                <ChevronRight size={16} className="text-muted" />
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <nav aria-label="Sezioni" className="flex items-center gap-1.5 rounded-full bg-dock p-1.5 shadow-[0_18px_40px_-16px_rgb(0_0_0/0.45)]">
+        {items.map((it) => (
+          <button
+            key={it.id}
+            onClick={it.onClick}
+            aria-current={it.active ? 'page' : undefined}
+            aria-label={it.label}
+            aria-expanded={it.id === 'more' ? more : undefined}
+            className={cx('relative flex h-12 items-center justify-center rounded-full transition-colors', it.active ? 'px-5' : 'w-12 bg-dock-btn text-dock-fg hover:brightness-125')}
+          >
+            {it.active && <motion.span layoutId="dock-active" className="absolute inset-0 rounded-full bg-white" transition={{ type: 'spring', stiffness: 420, damping: 34 }} />}
+            <span className={cx('relative flex items-center gap-2', it.active && 'text-[#1b1b1a]')}>
+              <it.icon size={19} strokeWidth={1.9} />
+              {it.active && <span className="text-[15px] font-medium whitespace-nowrap">{it.label}</span>}
+            </span>
+          </button>
+        ))}
+      </nav>
     </div>
   )
 }
 
-function Sidebar({ onSearch }: { onSearch: () => void }) {
-  const view = useFinny((s) => s.view)
+function TopBar({ onSearch }: { onSearch: () => void }) {
   const go = useFinny((s) => s.go)
-  const isDemo = useFinny((s) => s.isDemo)
+  const aiReady = useAiReady()
   return (
-    <aside className="sticky top-0 hidden h-dvh w-[248px] shrink-0 flex-col border-r border-line bg-bg/60 px-4 py-6 backdrop-blur-xl lg:flex">
-      <div className="px-2">
-        <Wordmark />
-      </div>
-      <button
-        onClick={onSearch}
-        className="mt-8 flex items-center gap-2 rounded-xl border border-line bg-surface px-3 py-2 text-sm text-muted transition-colors hover:border-line-strong hover:text-fg-2"
-      >
-        <Search size={15} />
-        Cerca o vai a…
-        <kbd className="ml-auto inline-flex items-center gap-0.5 rounded-md border border-line px-1.5 font-mono text-[10px]">
-          <Command size={10} />K
-        </kbd>
+    <header className="mx-auto flex w-full max-w-[1120px] items-center justify-between px-4 pt-[calc(14px+env(safe-area-inset-top,0px))] sm:px-6 lg:px-8">
+      <button onClick={() => go('home')} className="flex items-center gap-2" aria-label="Finny, torna alla panoramica">
+        <Mark size={30} />
+        <span className="leading-none">
+          <span className="figure block text-[19px] text-fg">Finny</span>
+          <span className="block text-[10px] font-medium tracking-[0.12em] text-muted uppercase">by vocina</span>
+        </span>
       </button>
-      <nav className="mt-6 flex flex-col gap-0.5" aria-label="Sezioni">
-        {NAV.map((n) => {
-          const active = view === n.id
-          return (
-            <button
-              key={n.id}
-              onClick={() => go(n.id)}
-              aria-current={active ? 'page' : undefined}
-              className={cx('relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors', active ? 'text-fg' : 'text-fg-2 hover:text-fg')}
-            >
-              {active && (
-                <motion.span
-                  layoutId="nav-active"
-                  className="absolute inset-0 rounded-xl border border-line-strong bg-surface-2"
-                  transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-                />
-              )}
-              <n.icon size={17} className={cx('relative', active && 'text-accent')} />
-              <span className="relative">{n.label}</span>
-            </button>
-          )
-        })}
-      </nav>
-      <div className="mt-auto space-y-4 px-2">
-        {isDemo && (
-          <div className="rounded-2xl border border-accent/30 bg-accent-soft p-3 text-xs text-fg-2">
-            <div className="font-semibold text-fg">Stai guardando dati di esempio</div>
-            <p className="mt-1">Importa un estratto conto per vedere i tuoi. Resta tutto nel browser.</p>
-            <button onClick={() => go('importa')} className="mt-2 font-semibold text-accent">
-              Importa ora →
-            </button>
-          </div>
+      <div className="flex items-center gap-2">
+        {aiReady && (
+          <IconButton label="Chiedi a Finny" onClick={() => go('chiedi')}>
+            <Sparkles size={18} />
+          </IconButton>
         )}
-        <ThemeSwitch />
-      </div>
-    </aside>
-  )
-}
-
-function MobileBar() {
-  const view = useFinny((s) => s.view)
-  const go = useFinny((s) => s.go)
-  return (
-    <nav
-      aria-label="Sezioni"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-bg/85 px-2 pt-1.5 pb-[calc(6px+env(safe-area-inset-bottom,0px))] backdrop-blur-xl lg:hidden"
-    >
-      <div className="mx-auto flex max-w-md justify-between">
-        {NAV.filter((n) => n.mobile).map((n) => {
-          const active = view === n.id
-          return (
-            <button key={n.id} onClick={() => go(n.id)} aria-current={active ? 'page' : undefined} className="relative flex flex-1 flex-col items-center gap-0.5 py-1.5 text-[10.5px] font-medium">
-              {active && <motion.span layoutId="mob-active" className="absolute top-0 h-[3px] w-8 rounded-full bg-accent" />}
-              <n.icon size={20} className={active ? 'text-accent' : 'text-muted'} />
-              <span className={active ? 'text-fg' : 'text-muted'}>{n.label}</span>
-            </button>
-          )
-        })}
-      </div>
-    </nav>
-  )
-}
-
-function MobileTop({ onSearch }: { onSearch: () => void }) {
-  const go = useFinny((s) => s.go)
-  return (
-    <header className="sticky top-[env(safe-area-inset-top,0px)] z-30 flex items-center justify-between border-b border-line bg-bg/75 px-4 py-3 backdrop-blur-xl lg:hidden">
-      <Wordmark />
-      <div className="flex items-center gap-1">
-        <button aria-label="Cerca" onClick={onSearch} className="grid size-9 place-items-center rounded-full text-fg-2 hover:bg-surface-3">
-          <Search size={18} />
-        </button>
-        <button aria-label="Impostazioni" onClick={() => go('impostazioni')} className="grid size-9 place-items-center rounded-full text-fg-2 hover:bg-surface-3">
-          <Settings size={18} />
-        </button>
+        <IconButton label="Cerca (⌘K)" onClick={onSearch}>
+          <Search size={19} />
+        </IconButton>
+        <IconButton label="Importa un estratto conto" onClick={() => go('importa')}>
+          <Plus size={20} />
+        </IconButton>
       </div>
     </header>
   )
@@ -213,18 +205,18 @@ function Palette({ open, onClose }: { open: boolean; onClose: () => void }) {
     <AnimatePresence>
       {open && (
         <motion.div className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-[12vh]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" onClick={onClose} />
           <motion.div
             role="dialog"
             aria-label="Cerca"
-            initial={{ y: -20, scale: 0.96, opacity: 0 }}
+            initial={{ y: -16, scale: 0.97, opacity: 0 }}
             animate={{ y: 0, scale: 1, opacity: 1 }}
             exit={{ y: -10, scale: 0.98, opacity: 0 }}
             transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-            className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-line-strong bg-surface shadow-2xl"
+            className="relative w-full max-w-lg overflow-hidden rounded-[28px] bg-surface shadow-[0_30px_80px_-24px_rgb(0_0_0/0.4)]"
           >
-            <div className="flex items-center gap-2 border-b border-line px-4">
-              <Search size={16} className="text-muted" />
+            <div className="flex items-center gap-2 px-5">
+              <Search size={17} className="text-muted" />
               <input
                 id="palette-q"
                 ref={input}
@@ -243,10 +235,10 @@ function Palette({ open, onClose }: { open: boolean; onClose: () => void }) {
                   if (e.key === 'Escape') onClose()
                 }}
                 placeholder="Cerca un esercente o una sezione"
-                className="h-12 flex-1 bg-transparent text-[15px] text-fg outline-none placeholder:text-muted"
+                className="h-14 flex-1 bg-transparent text-base text-fg outline-none placeholder:text-muted"
               />
             </div>
-            <ul className="scroll-thin max-h-[50vh] overflow-auto p-2">
+            <ul className="scroll-thin max-h-[50vh] overflow-auto border-t border-line p-2">
               {results.map((r, i) => (
                 <li key={r.key}>
                   <button
@@ -255,9 +247,11 @@ function Palette({ open, onClose }: { open: boolean; onClose: () => void }) {
                       r.run()
                       onClose()
                     }}
-                    className={cx('flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm', i === idx ? 'bg-surface-3 text-fg' : 'text-fg-2')}
+                    className={cx('flex w-full items-center gap-3 rounded-[18px] px-3 py-2.5 text-left text-[15px]', i === idx ? 'bg-surface-2 text-fg' : 'text-fg-2')}
                   >
-                    <r.icon size={16} className={i === idx ? 'text-accent' : 'text-muted'} />
+                    <span className={cx('grid size-9 place-items-center rounded-full', i === idx ? 'bg-ink text-ink-fg' : 'bg-surface-3 text-fg-2')}>
+                      <r.icon size={16} />
+                    </span>
                     <span className="flex-1 truncate">{r.label}</span>
                     <span className="text-xs text-muted tabular-nums">{r.hint}</span>
                   </button>
@@ -285,16 +279,13 @@ export function Shell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
   return (
-    <div className="flex min-h-dvh">
-      <Sidebar onSearch={() => setPalette(true)} />
-      <div className="min-w-0 flex-1">
-        <MobileTop onSearch={() => setPalette(true)} />
-        <main className="mx-auto w-full max-w-[1180px] px-4 pt-6 pb-[calc(110px+env(safe-area-inset-bottom,0px))] sm:px-6 lg:px-10 lg:pt-10 lg:pb-16">{children}</main>
-        <footer className="mx-auto hidden max-w-[1180px] items-center gap-2 px-10 pb-8 text-xs text-muted lg:flex">
-          <Mark size={16} animate={false} /> Finny by vocina · i tuoi dati restano in questo browser, salvo ciò che chiedi all'assistente AI se lo attivi
-        </footer>
-      </div>
-      <MobileBar />
+    <div className="min-h-dvh">
+      <TopBar onSearch={() => setPalette(true)} />
+      <main className="mx-auto w-full max-w-[1120px] px-4 pt-5 pb-[calc(120px+env(safe-area-inset-bottom,0px))] sm:px-6 lg:px-8 lg:pt-8">{children}</main>
+      <footer className="mx-auto flex max-w-[1120px] items-center gap-2 px-4 pb-[calc(100px+env(safe-area-inset-bottom,0px))] text-xs text-muted sm:px-6 lg:px-8">
+        <Mark size={14} animate={false} /> Finny by vocina · i tuoi dati restano in questo browser, salvo ciò che chiedi all'assistente AI se lo attivi
+      </footer>
+      <Dock />
       <Palette open={palette} onClose={() => setPalette(false)} />
     </div>
   )

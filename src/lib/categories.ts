@@ -15,6 +15,8 @@ export type Bucket = 'needs' | 'wants' | 'savings' | 'income' | 'neutral' | 'oth
 export interface CategoryDef {
   id: CategoryId
   label: string
+  /** one word for tight spots like chart labels */
+  short?: string
   icon: LucideIcon
   bucket: Bucket
   /** hue (0-360) used only for the icon chip tint, never for chart series */
@@ -23,30 +25,30 @@ export interface CategoryDef {
 
 export const CATEGORIES: CategoryDef[] = [
   { id: 'stipendio', label: 'Stipendio', icon: Briefcase, bucket: 'income', hue: 160 },
-  { id: 'entrate', label: 'Altre entrate', icon: Coins, bucket: 'income', hue: 150 },
+  { id: 'entrate', label: 'Altre entrate', short: 'Entrate', icon: Coins, bucket: 'income', hue: 150 },
   { id: 'rimborsi', label: 'Rimborsi', icon: RefreshCcw, bucket: 'income', hue: 140 },
-  { id: 'casa', label: 'Casa e affitto', icon: Home, bucket: 'needs', hue: 30 },
+  { id: 'casa', label: 'Casa e affitto', short: 'Casa', icon: Home, bucket: 'needs', hue: 30 },
   { id: 'bollette', label: 'Bollette', icon: Zap, bucket: 'needs', hue: 45 },
-  { id: 'telefonia', label: 'Telefono e internet', icon: Smartphone, bucket: 'needs', hue: 200 },
+  { id: 'telefonia', label: 'Telefono e internet', short: 'Telefono', icon: Smartphone, bucket: 'needs', hue: 200 },
   { id: 'spesa', label: 'Spesa', icon: ShoppingCart, bucket: 'needs', hue: 95 },
-  { id: 'ristoranti', label: 'Ristoranti e bar', icon: UtensilsCrossed, bucket: 'wants', hue: 15 },
-  { id: 'delivery', label: 'Food delivery', icon: Bike, bucket: 'wants', hue: 5 },
+  { id: 'ristoranti', label: 'Ristoranti e bar', short: 'Ristoranti', icon: UtensilsCrossed, bucket: 'wants', hue: 15 },
+  { id: 'delivery', label: 'Food delivery', short: 'Delivery', icon: Bike, bucket: 'wants', hue: 5 },
   { id: 'trasporti', label: 'Trasporti', icon: Bus, bucket: 'needs', hue: 210 },
-  { id: 'auto', label: 'Auto e carburante', icon: Car, bucket: 'needs', hue: 220 },
+  { id: 'auto', label: 'Auto e carburante', short: 'Auto', icon: Car, bucket: 'needs', hue: 220 },
   { id: 'abbonamenti', label: 'Abbonamenti', icon: Repeat, bucket: 'wants', hue: 280 },
   { id: 'shopping', label: 'Shopping', icon: ShoppingBag, bucket: 'wants', hue: 320 },
   { id: 'salute', label: 'Salute', icon: HeartPulse, bucket: 'needs', hue: 350 },
-  { id: 'svago', label: 'Tempo libero', icon: Clapperboard, bucket: 'wants', hue: 265 },
+  { id: 'svago', label: 'Tempo libero', short: 'Svago', icon: Clapperboard, bucket: 'wants', hue: 265 },
   { id: 'viaggi', label: 'Viaggi', icon: Plane, bucket: 'wants', hue: 190 },
   { id: 'istruzione', label: 'Istruzione', icon: BookOpen, bucket: 'needs', hue: 240 },
   { id: 'animali', label: 'Animali', icon: PawPrint, bucket: 'needs', hue: 35 },
-  { id: 'regali', label: 'Regali e donazioni', icon: Gift, bucket: 'wants', hue: 335 },
-  { id: 'commissioni', label: 'Commissioni bancarie', icon: Landmark, bucket: 'needs', hue: 0 },
-  { id: 'tasse', label: 'Tasse e tributi', icon: Receipt, bucket: 'needs', hue: 10 },
-  { id: 'contanti', label: 'Prelievi contanti', icon: Banknote, bucket: 'wants', hue: 60 },
-  { id: 'investimenti', label: 'Risparmio e investimenti', icon: TrendingUp, bucket: 'savings', hue: 170 },
+  { id: 'regali', label: 'Regali e donazioni', short: 'Regali', icon: Gift, bucket: 'wants', hue: 335 },
+  { id: 'commissioni', label: 'Commissioni bancarie', short: 'Commissioni', icon: Landmark, bucket: 'needs', hue: 0 },
+  { id: 'tasse', label: 'Tasse e tributi', short: 'Tasse', icon: Receipt, bucket: 'needs', hue: 10 },
+  { id: 'contanti', label: 'Prelievi contanti', short: 'Contanti', icon: Banknote, bucket: 'wants', hue: 60 },
+  { id: 'investimenti', label: 'Risparmio e investimenti', short: 'Risparmio', icon: TrendingUp, bucket: 'savings', hue: 170 },
   { id: 'trasferimenti', label: 'Giroconti', icon: ArrowLeftRight, bucket: 'neutral', hue: 230 },
-  { id: 'persone', label: 'Pagamenti a persone', icon: Users, bucket: 'other', hue: 25 },
+  { id: 'persone', label: 'Pagamenti a persone', short: 'Persone', icon: Users, bucket: 'other', hue: 25 },
   { id: 'altro', label: 'Altro', icon: Sparkles, bucket: 'wants', hue: 250 },
 ]
 

@@ -160,6 +160,8 @@ export interface Subscription {
   count: number
   history: { date: string; amount: number }[]
   priceChange?: { from: number; to: number }
+  /** no charge for more than two cycles: probably cancelled */
+  stopped?: boolean
 }
 
 const CADENCES: { name: Cadence; min: number; max: number; perYear: number }[] = [
@@ -186,7 +188,7 @@ function median(xs: number[]) {
  * A charge is recurring when the same merchant bills a similar amount
  * (±20% of the median) at a steady interval. Rent, bills and gym count too.
  */
-export function detectSubscriptions(txs: Transaction[]): Subscription[] {
+export function detectSubscriptions(txs: Transaction[], opts: { includeStopped?: boolean } = {}): Subscription[] {
   const groups = new Map<string, Transaction[]>()
   for (const t of txs) {
     if (!(isExpense(t) || isSaving(t)) || ['spesa', 'ristoranti', 'delivery', 'contanti', 'auto', 'shopping'].includes(t.category)) continue
@@ -214,7 +216,8 @@ export function detectSubscriptions(txs: Transaction[]): Subscription[] {
     if (regular < 0.7 || steady.length < minCount) continue
     const last = list[list.length - 1]
     // stale: nothing billed for 2+ cycles means it was probably cancelled
-    if (daysBetween(last.date, today) > gap * 2.2 + 5) continue
+    const stopped = daysBetween(last.date, today) > gap * 2.2 + 5
+    if (stopped && !opts.includeStopped) continue
     // most recent charge that differs from today's price, if it's from the last 6 months
     const lastPrice = -last.amount
     const before = [...steady].reverse().find((t) => Math.abs(-t.amount - lastPrice) >= 0.5)
@@ -227,13 +230,54 @@ export function detectSubscriptions(txs: Transaction[]): Subscription[] {
       cadence: cadence.name,
       yearly: -last.amount * cadence.perYear,
       last: last.date,
-      next: nextAfter(last.date, Math.round(gap), today),
+      next: stopped ? '' : nextAfter(last.date, Math.round(gap), today),
+      stopped: stopped || undefined,
       count: steady.length,
       history: steady.map((t) => ({ date: t.date, amount: -t.amount })),
       priceChange: Math.abs(prev - -last.amount) >= 0.5 ? { from: prev, to: -last.amount } : undefined,
     })
   }
   return out.sort((a, b) => b.yearly - a.yearly)
+}
+
+// ─── Overlaps ─────────────────────────────────────────────────────────────────
+
+/** Services that usually do the same job: paying for two is sometimes on purpose, often not */
+const SERVICE_GROUPS: { id: string; label: string; match: RegExp }[] = [
+  { id: 'video', label: 'Streaming video', match: /netflix|disney|prime video|amazon prime|dazn|now tv|nowtv|sky|paramount|timvision|infinity|apple tv|discovery|crunchyroll/i },
+  { id: 'musica', label: 'Musica', match: /spotify|apple music|tidal|deezer|youtube music|amazon music|qobuz/i },
+  { id: 'cloud', label: 'Archivio cloud', match: /icloud|google one|google storage|dropbox|onedrive|pcloud|mega\b/i },
+  { id: 'ai', label: 'Assistenti AI', match: /chatgpt|openai|claude|anthropic|perplexity|gemini|midjourney|copilot|mistral|poe\b/i },
+  { id: 'fitness', label: 'Palestra e fitness', match: /mcfit|virgin active|palestra|fitprime|anytime fitness|gym|fitness|strava|freeletics/i },
+  { id: 'news', label: 'Giornali e notizie', match: /corriere|repubblica|sole 24|gazzetta|nyt|new york times|economist|post\b|internazionale/i },
+]
+
+export function serviceGroup(merchant: string) {
+  return SERVICE_GROUPS.find((g) => g.match.test(merchant))
+}
+
+export interface Overlap {
+  id: string
+  label: string
+  items: Subscription[]
+  /** what keeping only the most expensive one would save each month */
+  monthlySaving: number
+}
+
+export function findOverlaps(subs: Subscription[]): Overlap[] {
+  const by = new Map<string, Subscription[]>()
+  for (const s of subs) {
+    if (s.stopped) continue
+    const g = serviceGroup(s.merchant)
+    if (g) by.set(g.id, [...(by.get(g.id) ?? []), s])
+  }
+  return [...by.entries()]
+    .filter(([, items]) => items.length > 1)
+    .map(([id, items]) => {
+      const monthly = items.map((s) => s.yearly / 12).sort((a, b) => b - a)
+      return { id, label: SERVICE_GROUPS.find((g) => g.id === id)!.label, items, monthlySaving: monthly.slice(1).reduce((a, v) => a + v, 0) }
+    })
+    .sort((a, b) => b.monthlySaving - a.monthlySaving)
 }
 
 // ─── Forecast ─────────────────────────────────────────────────────────────────

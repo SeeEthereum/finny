@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { BudgetRing } from '../components/charts/charts'
 import { Empty, PageHeader } from '../components/shared'
 import { toast } from '../components/ui/toast'
-import { AnimatedNumber, Button, Card, CategoryIcon, cx } from '../components/ui/primitives'
+import { BigMoney, Button, Card, CategoryIcon, cx } from '../components/ui/primitives'
 import { categoryTotals, inMonth } from '../lib/analytics'
 import { category, EXPENSE_CATEGORIES } from '../lib/categories'
 import { daysInMonth, money, monthKey, monthLabel, percent, shiftMonth, todayISO } from '../lib/format'
@@ -65,20 +65,17 @@ export default function Budget() {
         <Card className="mb-5 p-5 sm:p-6">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <div className="eyebrow">Speso sul totale dei budget</div>
-              <div className="mt-2 text-4xl font-semibold tracking-tight text-fg">
-                <AnimatedNumber value={totalSpent} format={(n) => money(n, { round: true })} />
-                <span className="text-lg font-medium text-muted"> / {money(totalBudget, { round: true })}</span>
-              </div>
+              <div className="text-sm text-fg-2">Speso sul totale dei budget</div>
+              <BigMoney value={totalSpent} size="lg" unit={`di ${money(totalBudget, { round: true })}`} className="mt-2" />
             </div>
             <div className="text-sm text-fg-2">
               {isCurrent ? `Giorno ${day} di ${daysInMonth(cur)}: il ritmo ideale è ${percent(elapsed)}` : 'Mese concluso'}
             </div>
           </div>
-          <div className="relative mt-4 h-2.5 rounded-full bg-accent-soft">
+          <div className="relative mt-4 h-2.5 rounded-full bg-track">
             <motion.div
               className="h-full rounded-full"
-              style={{ background: totalSpent > totalBudget ? 'var(--critical)' : totalSpent / totalBudget > elapsed + 0.1 ? 'var(--warning)' : 'var(--accent)' }}
+              style={{ background: totalSpent > totalBudget ? 'var(--critical)' : totalSpent / totalBudget > elapsed + 0.1 ? 'var(--warning)' : 'var(--series-1)' }}
               initial={{ width: 0 }}
               animate={{ width: `${Math.min(100, (totalSpent / Math.max(1, totalBudget)) * 100)}%` }}
               transition={{ type: 'spring', stiffness: 60, damping: 16 }}
@@ -110,7 +107,7 @@ export default function Budget() {
               >
                 <label className="flex flex-1 flex-col gap-1 text-sm text-fg-2">
                   Categoria
-                  <select id="budget-cat" value={newCat} onChange={(e) => setNewCat(e.target.value as CategoryId)} className="h-11 rounded-xl border border-line bg-bg-2 px-3 text-fg outline-none focus:border-accent/60">
+                  <select id="budget-cat" value={newCat} onChange={(e) => setNewCat(e.target.value as CategoryId)} className="h-11 rounded-2xl border border-transparent bg-surface-2 px-3 text-fg outline-none focus:border-accent/60">
                     {available.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.label}
@@ -126,7 +123,7 @@ export default function Budget() {
                     value={newAmount}
                     onChange={(e) => setNewAmount(e.target.value)}
                     placeholder={avg3[newCat] ? `media ${Math.round(avg3[newCat]!)}` : '150'}
-                    className="h-11 rounded-xl border border-line bg-bg-2 px-3 text-fg outline-none placeholder:text-muted focus:border-accent/60"
+                    className="h-11 rounded-2xl border border-transparent bg-surface-2 px-3 text-fg outline-none placeholder:text-muted focus:border-accent/60"
                   />
                 </label>
                 <div className="flex gap-2">
@@ -171,7 +168,7 @@ export default function Budget() {
                 animate={{ opacity: 1, scale: 1, y: 0, transition: { delay: i * 0.04 } }}
                 exit={{ opacity: 0, scale: 0.9 }}
               >
-                <Card className="group p-4">
+                <Card className="group p-4 sm:p-5">
                   <div className="flex items-center gap-4">
                     <div className="relative">
                       <BudgetRing spent={s} budget={budget} size={68} />
@@ -180,7 +177,7 @@ export default function Budget() {
                       </div>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate font-semibold text-fg">{category(c).label}</div>
+                      <div className="truncate text-[16px] font-medium text-fg">{category(c).label}</div>
                       <div className="text-sm text-fg-2 tabular-nums">
                         {money(s, { round: true })} di {money(budget, { round: true })}
                       </div>

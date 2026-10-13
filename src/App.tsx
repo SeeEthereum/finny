@@ -1,7 +1,6 @@
 import { AnimatePresence, motion, MotionConfig } from 'motion/react'
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Shell } from './components/Shell'
-import { Ambient } from './components/ui/Ambient'
 import { Mark } from './components/ui/Brand'
 import { Toaster } from './components/ui/toast'
 import Home from './pages/Home'
@@ -74,8 +73,7 @@ export default function App() {
 
   return (
     <MotionConfig reducedMotion="user">
-      <div className="grain">
-        <Ambient />
+      <div>
         <Shell>
           <AnimatePresence mode="wait">
             <motion.div

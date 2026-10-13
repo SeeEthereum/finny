@@ -124,7 +124,7 @@ function Simulation() {
                 animate={{ scale: state === 'active' ? 1.08 : 1 }}
                 className={cx(
                   'relative z-10 grid size-10 shrink-0 place-items-center rounded-full border transition-colors',
-                  state === 'done' ? 'border-accent bg-accent text-accent-ink' : state === 'active' ? 'border-accent bg-accent-soft text-accent' : 'border-line bg-surface text-muted',
+                  state === 'done' ? 'border-ink bg-ink text-ink-fg' : state === 'active' ? 'border-accent bg-accent text-accent-ink' : 'border-line bg-surface text-muted',
                 )}
               >
                 <AnimatePresence mode="wait" initial={false}>
@@ -216,7 +216,7 @@ export default function Collega() {
               </tbody>
             </table>
           </div>
-          <div className="mt-5 flex items-start gap-2 rounded-xl border border-line bg-bg-2 p-3 text-sm text-fg-2">
+          <div className="mt-5 flex items-start gap-2 rounded-2xl border border-transparent bg-surface-2 p-3 text-sm text-fg-2">
             <ShieldAlert size={16} className="mt-0.5 shrink-0 text-warning" />
             <p>
               Per leggere i conti di altre persone serve una licenza da prestatore di servizi di informazione sui conti (AISP) oppure un fornitore che ce l'ha. Per attivarlo in Finny servono un contratto con un fornitore autorizzato e un piccolo server che custodisca le chiavi API. Finché non ci sono, l'import da file fa tutto il resto.
