@@ -39,14 +39,23 @@ npm run build      # build statica in dist/, pubblicabile su qualsiasi hosting
 
 - **CSV**: separatore `;` `,` tab o `|`, codifica UTF-8 o Windows-1252, righe di preambolo prima dell'intestazione, importo unico con segno oppure colonne Dare/Avere (Addebiti/Accrediti, Uscite/Entrate), date `gg/mm/aaaa`, ISO, `gg mese aaaa`. Gli export in stile Revolut (colonne `State` e `Fee`) sono gestiti.
 - **Excel `.xlsx`**: stesse regole del CSV. Il vecchio formato `.xls` non è supportato: salvalo come `.xlsx` o CSV.
-- **PDF (beta)**: solo PDF con testo selezionabile (non scansioni). Il segno si ricava dalle colonne Dare/Avere se presenti, altrimenti dal segno scritto o dalle parole della causale; l'anteprima permette di correggerlo riga per riga.
+- **PDF (beta)**: solo PDF con testo selezionabile (non scansioni). Finny riconosce tre impaginazioni:
+  - una riga per movimento con la sua data, in qualunque colonna (anche solo sulla prima riga del giorno);
+  - movimenti raggruppati sotto il giorno, come nelle app;
+  - coppie etichetta/valore ("Data … Importo …").
+  Gestisce pagine ruotate, testo scritto lettera per lettera, stampe monospazio, date senza anno o in formato ISO, importi con segno, con D/C o in colonne separate. Il segno viene, in ordine di affidabilità:
+  - dalle colonne Dare/Avere;
+  - dalla colonna del saldo (ogni saldo meno il precedente);
+  - dal segno scritto;
+  - in ultima istanza, dalle parole della causale.
+  Se l'estratto stampa i saldi, l'anteprima dice se saldo iniziale + movimenti = saldo finale. I test in `src/lib/parse/pdf.test.ts` generano PDF veri per ciascun caso e li leggono con pdf.js.
 
 ## Architettura
 
 ```
 src/
   lib/
-    parse/        values.ts (date, importi) · table.ts (intestazione e colonne) · readers.ts (CSV/XLSX) · pdf.ts
+    parse/        values.ts (date, importi) · table.ts (intestazione e colonne) · readers.ts (CSV/XLSX) · pdf.ts · testPdf.ts (PDF di prova)
     categorize.ts dizionario di esercenti italiani, pulizia dei nomi, regole utente
     analytics.ts  statistiche mensili, categorie, 50/30/20, ricorrenti, previsione
     insights.ts   i consigli della vocina, con fonte dove serve

@@ -21,7 +21,7 @@ type Stage =
   | { kind: 'pdf'; name: string; result: PdfResult }
   | { kind: 'done'; name: string; outcome: ImportOutcome }
   | { kind: 'password'; file: File; rest: File[]; incorrect: boolean }
-  | { kind: 'nothing'; name: string; pages: number; text: string[] }
+  | { kind: 'nothing'; name: string; pages: number; text: string[]; stats: PdfResult['stats'] }
   | { kind: 'error'; name: string; detail: string }
 
 function guessName(file: string) {
@@ -53,7 +53,7 @@ export default function Importa() {
       if (kind === 'pdf') {
         const result = await readPdf(file, password)
         if (!result.drafts.length) {
-          setStage({ kind: 'nothing', name: file.name, pages: result.pages, text: result.text })
+          setStage({ kind: 'nothing', name: file.name, pages: result.pages, text: result.text, stats: result.stats })
           return
         }
         setStage({ kind: 'pdf', name: file.name, result })
@@ -296,6 +296,16 @@ function PasswordStep({
   )
 }
 
+/** What the reader saw, in plain words, so the next step is clear */
+function diagnosis({ dated, withAmount, readable }: PdfResult['stats']) {
+  if (readable < 0.7) {
+    return "Il testo dentro questo PDF è codificato in modo illeggibile (i caratteri non corrispondono alle lettere che vedi a schermo): succede con alcuni generatori di PDF e senza riconoscimento ottico non si può leggere. Esporta lo stesso periodo in CSV o Excel."
+  }
+  if (!dated) return 'Non ho trovato nessuna data nel testo: forse il PDF non è un estratto conto, oppure scrive le date in un formato che non conosco.'
+  if (!withAmount) return 'Ho trovato delle date ma nessun importo con due decimali (come 12,50): forse gli importi sono scritti senza decimali o con un formato che non conosco.'
+  return `Ho trovato ${dated} righe con una data e ${withAmount} con un importo, ma non riesco ad abbinarle in movimenti: l'impaginazione è diversa da quelle che conosco.`
+}
+
 function Diagnostic({ stage, onBack }: { stage: Extract<Stage, { kind: 'nothing' }>; onBack: () => void }) {
   const empty = stage.text.length === 0
   const sample = stage.text.slice(0, 80).join('\n')
@@ -311,8 +321,9 @@ function Diagnostic({ stage, onBack }: { stage: Extract<Stage, { kind: 'nothing'
             </p>
           ) : (
             <>
-              <p className="mt-1 text-sm text-fg-2">
-                Qui sotto c'è il testo che ho estratto da {stage.pages} {stage.pages === 1 ? 'pagina' : 'pagine'}, così come lo vedo io. Finny cerca righe che iniziano con una data e contengono un importo: se il tuo estratto è impaginato diversamente, da questo testo si capisce come adattarlo.
+              <p className="mt-1 text-sm text-fg">{diagnosis(stage.stats)}</p>
+              <p className="mt-2 text-sm text-fg-2">
+                Qui sotto c'è il testo che ho estratto da {stage.pages} {stage.pages === 1 ? 'pagina' : 'pagine'}, così come lo vedo io: da qui si capisce come adattare la lettura al tuo estratto.
               </p>
               <div className="mt-3 flex items-start gap-2 rounded-xl border border-warning/40 bg-warning/10 p-3 text-sm text-fg">
                 <TriangleAlert size={16} className="mt-0.5 shrink-0 text-warning" />
@@ -695,6 +706,7 @@ function PdfReview({
   const flip = (key: string) => setDrafts((ds) => ds.map((d) => (d.key === key ? { ...d, amount: -d.amount } : d)))
   const note = {
     columns: { tone: 'good', text: 'Ho riconosciuto le colonne Dare/Avere: il segno dei movimenti dovrebbe essere corretto.' },
+    balance: { tone: 'good', text: 'Ho ricavato entrate e uscite dalla colonna del saldo: ogni saldo meno il precedente dà il movimento esatto, segno compreso.' },
     explicit: { tone: 'good', text: 'Gli importi hanno il segno scritto nel PDF.' },
     guess: {
       tone: 'warning',
@@ -766,7 +778,11 @@ function PdfReview({
             <span className="text-fg">−{money(totals.out)}</span>
           </div>
         </div>
-        <p className="mt-1 text-xs text-muted">Confronta questi totali con il riepilogo stampato nell'estratto: devono coincidere.</p>
+        {stage.result.check ? (
+          <CheckNote check={stage.result.check} />
+        ) : (
+          <p className="mt-1 text-xs text-muted">Confronta questi totali con il riepilogo stampato nell'estratto: devono coincidere.</p>
+        )}
         {stage.result.latestBalance && <p className="mt-1 text-xs text-muted">Saldo di chiusura letto: {money(stage.result.latestBalance.amount)} al {shortDate(stage.result.latestBalance.date)}</p>}
         <DraftTable drafts={drafts} onFlip={flip} />
         <div className="mt-auto flex flex-wrap justify-end gap-2 pt-5">
@@ -778,6 +794,24 @@ function PdfReview({
           </Button>
         </div>
       </Card>
+    </div>
+  )
+}
+
+/** Whether the movements add up, against the balances printed on the statement itself */
+function CheckNote({ check }: { check: NonNullable<PdfResult['check']> }) {
+  const text =
+    check.how === 'saldi'
+      ? check.ok
+        ? `I conti tornano: saldo iniziale ${money(check.opening!)} più i movimenti dà il saldo finale stampato, ${money(check.closing!)}.`
+        : `Saldo iniziale ${money(check.opening!)} più i movimenti non dà il saldo finale stampato (${money(check.closing!)}): mancano ${money(Math.abs(check.diff ?? 0))}. Può essere sfuggito un movimento o un segno è sbagliato.`
+      : check.ok
+        ? `I conti tornano: ogni saldo di riga è il precedente più il movimento (${check.total} controlli su ${check.total}).`
+        : `Il saldo di riga torna in ${check.matched} controlli su ${check.total}: controlla i segni dei movimenti che non tornano.`
+  return (
+    <div className={cx('mt-2 flex items-start gap-2 rounded-xl border p-2.5 text-xs', check.ok ? 'border-good/40 bg-good/10' : 'border-warning/40 bg-warning/10')}>
+      {check.ok ? <Check size={14} className="mt-px shrink-0 text-good" /> : <TriangleAlert size={14} className="mt-px shrink-0 text-warning" />}
+      <span className="text-fg">{text}</span>
     </div>
   )
 }

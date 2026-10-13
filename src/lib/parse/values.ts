@@ -11,7 +11,7 @@ const MONTH_NAMES: Record<string, number> = {
   giu: 6, giugno: 6, jun: 6, june: 6,
   lug: 7, luglio: 7, jul: 7, july: 7,
   ago: 8, agosto: 8, aug: 8, august: 8,
-  set: 9, settembre: 9, sep: 9, sept: 9, september: 9,
+  set: 9, sett: 9, settembre: 9, sep: 9, sept: 9, september: 9,
   ott: 10, ottobre: 10, oct: 10, october: 10,
   nov: 11, novembre: 11, november: 11,
   dic: 12, dicembre: 12, dec: 12, december: 12,
