@@ -7,7 +7,7 @@ import { PageHeader } from '../components/shared'
 import { toast } from '../components/ui/toast'
 import { Button, Card, cx } from '../components/ui/primitives'
 import { money, shortDate } from '../lib/format'
-import { PdfPasswordError, readPdf, type PdfResult } from '../lib/parse/pdf'
+import { PdfPasswordError, ReadCancelled, readImage, readPdf, type PdfResult, type ReadProgress } from '../lib/parse/pdf'
 import { fileKind, ImportError, readCsv, readXlsx, type FileKind } from '../lib/parse/readers'
 import { detectTable, mappingProblems, toDrafts, type DetectedTable, type DraftTx, type Mapping } from '../lib/parse/table'
 import { cellText } from '../lib/parse/values'
@@ -16,12 +16,12 @@ import { useFinny, type ImportOutcome } from '../store/useFinny'
 
 type Stage =
   | { kind: 'idle' }
-  | { kind: 'reading'; name: string }
-  | { kind: 'table'; name: string; fileKind: FileKind; table: DetectedTable }
+  | { kind: 'reading'; name: string; progress?: ReadProgress }
+  | { kind: 'table'; name: string; fileKind: Exclude<FileKind, 'pdf' | 'image'>; table: DetectedTable }
   | { kind: 'pdf'; name: string; result: PdfResult }
   | { kind: 'done'; name: string; outcome: ImportOutcome }
   | { kind: 'password'; file: File; rest: File[]; incorrect: boolean }
-  | { kind: 'nothing'; name: string; pages: number; text: string[]; stats: PdfResult['stats'] }
+  | { kind: 'nothing'; name: string; pages: number; text: string[]; stats: PdfResult['stats']; ocr: boolean }
   | { kind: 'error'; name: string; detail: string }
 
 function guessName(file: string) {
@@ -39,21 +39,25 @@ export default function Importa() {
   const [stage, setStage] = useState<Stage>({ kind: 'idle' })
   const [queue, setQueue] = useState<File[]>([])
   const [confetti, setConfetti] = useState(0)
+  const reading = useRef<AbortController | null>(null)
 
   const process = useCallback(async (file: File, rest: File[], password?: string) => {
     setQueue(rest)
     const kind = fileKind(file)
     if (!kind) {
-      toast(`${file.name}: formato non supportato. Usa CSV, Excel (.xlsx) o PDF.`, 'error')
+      toast(`${file.name}: formato non supportato. Usa CSV, Excel (.xlsx), PDF o una foto JPG/PNG.`, 'error')
       if (rest.length) void process(rest[0], rest.slice(1))
       return
     }
     setStage({ kind: 'reading', name: file.name })
+    const abort = new AbortController()
+    reading.current = abort
     try {
-      if (kind === 'pdf') {
-        const result = await readPdf(file, password)
+      if (kind === 'pdf' || kind === 'image') {
+        const opts = { password, signal: abort.signal, onProgress: (progress: ReadProgress) => setStage({ kind: 'reading', name: file.name, progress }) }
+        const result = kind === 'pdf' ? await readPdf(file, opts) : await readImage(file, opts)
         if (!result.drafts.length) {
-          setStage({ kind: 'nothing', name: file.name, pages: result.pages, text: result.text, stats: result.stats })
+          setStage({ kind: 'nothing', name: file.name, pages: result.pages, text: result.text, stats: result.stats, ocr: !!result.ocr })
           return
         }
         setStage({ kind: 'pdf', name: file.name, result })
@@ -62,7 +66,10 @@ export default function Importa() {
         setStage({ kind: 'table', name: file.name, fileKind: kind, table: detectTable(grid) })
       }
     } catch (e) {
-      if (e instanceof PdfPasswordError) {
+      if (e instanceof ReadCancelled) {
+        toast('Lettura annullata')
+        setStage({ kind: 'idle' })
+      } else if (e instanceof PdfPasswordError) {
         setStage({ kind: 'password', file, rest, incorrect: e.incorrect })
       } else if (e instanceof ImportError) {
         toast(e.message, 'error')
@@ -97,11 +104,7 @@ export default function Importa() {
         )}
         {stage.kind === 'reading' && (
           <motion.div key="reading" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}>
-            <Card className="flex flex-col items-center px-6 py-16 text-center">
-              <Loader2 className="animate-spin text-accent" size={32} />
-              <div className="mt-4 font-semibold text-fg">Sto leggendo {stage.name}</div>
-              <p className="mt-1 text-sm text-fg-2">Tutto avviene nel browser: il file non viene caricato da nessuna parte.</p>
-            </Card>
+            <Reading stage={stage} onCancel={() => reading.current?.abort()} />
           </motion.div>
         )}
         {stage.kind === 'table' && (
@@ -154,6 +157,36 @@ export default function Importa() {
   )
 }
 
+/** Progress while the file is read; OCR takes seconds per page, so it says where it is and can be stopped */
+function Reading({ stage, onCancel }: { stage: Extract<Stage, { kind: 'reading' }>; onCancel: () => void }) {
+  const p = stage.progress
+  const ocr = p?.stage === 'ocr'
+  const share = p ? (ocr ? (p.page - 1 + (p.progress ?? 0)) / p.pages : p.page / p.pages) : 0
+  return (
+    <Card className="flex flex-col items-center px-6 py-16 text-center">
+      <Loader2 className="animate-spin text-accent" size={32} />
+      <div className="mt-4 font-semibold text-fg">
+        {ocr ? (p.pages > 1 ? `Riconosco il testo della pagina ${p.page} di ${p.pages}` : "Riconosco il testo dell'immagine") : `Sto leggendo ${stage.name}`}
+      </div>
+      <p className="mt-1 max-w-md text-sm text-fg-2">
+        {ocr
+          ? "È una scansione o una foto: la leggo con il riconoscimento ottico (OCR), qui nel browser. Ci vogliono alcuni secondi per pagina; la prima volta scarico anche il modello per l'italiano (circa 5 MB)."
+          : 'Tutto avviene nel browser: il file non viene caricato da nessuna parte.'}
+      </p>
+      {p && (
+        <div className="mt-5 h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-track" role="progressbar" aria-valuenow={Math.round(share * 100)} aria-valuemin={0} aria-valuemax={100}>
+          <motion.div className="h-full rounded-full bg-ink" animate={{ width: `${Math.max(4, share * 100)}%` }} transition={{ duration: 0.3 }} />
+        </div>
+      )}
+      {ocr && (
+        <Button variant="ghost" size="sm" className="mt-4" onClick={onCancel}>
+          Annulla
+        </Button>
+      )}
+    </Card>
+  )
+}
+
 function DropZone({ onFiles }: { onFiles: (f: File[]) => void }) {
   const [over, setOver] = useState(false)
   const input = useRef<HTMLInputElement>(null)
@@ -202,7 +235,7 @@ function DropZone({ onFiles }: { onFiles: (f: File[]) => void }) {
         </div>
         <div className="mt-6 font-display text-2xl font-semibold text-fg">{over ? 'Lascia pure qui' : 'Trascina qui il tuo estratto conto'}</div>
         <p className="mt-2 max-w-md text-sm text-fg-2">
-          oppure <span className="font-semibold text-accent-text">sfoglia i file</span>. CSV ed Excel (.xlsx) danno i risultati migliori; il PDF funziona se contiene testo.
+          oppure <span className="font-semibold text-accent-text">sfoglia i file</span>. CSV ed Excel (.xlsx) danno i risultati migliori; PDF scansionati e foto li leggo con l'OCR.
         </p>
         <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-line bg-surface-2 px-3 py-1.5 text-xs text-fg-2">
           <Lock size={12} className="text-accent" /> Il file resta sul tuo dispositivo. Niente upload, niente server.
@@ -213,7 +246,7 @@ function DropZone({ onFiles }: { onFiles: (f: File[]) => void }) {
         ref={input}
         type="file"
         multiple
-        accept=".csv,.txt,.tsv,.xlsx,.xlsm,.pdf,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        accept=".csv,.txt,.tsv,.xlsx,.xlsm,.pdf,.jpg,.jpeg,.png,.webp,text/csv,application/pdf,image/jpeg,image/png,image/webp,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         className="hidden"
         onChange={(e) => {
           onFiles([...(e.target.files ?? [])])
@@ -314,14 +347,21 @@ function Diagnostic({ stage, onBack }: { stage: Extract<Stage, { kind: 'nothing'
       <div className="flex items-start gap-3">
         <FileSearch className="mt-0.5 shrink-0 text-warning" size={22} />
         <div className="min-w-0 flex-1">
-          <h2 className="text-lg font-semibold text-fg">{empty ? 'Questo PDF non contiene testo' : 'Ho letto il PDF ma non riconosco i movimenti'}</h2>
+          <h2 className="text-lg font-semibold text-fg">
+            {empty ? (stage.ocr ? 'Non riesco a leggere il testo di questa immagine' : 'Questo PDF non contiene testo') : 'Ho letto il file ma non riconosco i movimenti'}
+          </h2>
           {empty ? (
             <p className="mt-1 text-sm text-fg-2">
-              È una scansione o un'immagine: per leggerla servirebbe il riconoscimento ottico (OCR), che Finny non fa. Scarica dall'home banking lo stesso periodo in CSV o Excel.
+              {stage.ocr
+                ? "L'ho passata al riconoscimento ottico (OCR) ma non ho trovato testo leggibile: la foto potrebbe essere sfocata, storta o troppo piccola. Riprova con una scansione dritta e ben illuminata, oppure scarica dall'home banking lo stesso periodo in CSV o Excel."
+                : "Il PDF non ha pagine leggibili. Scarica dall'home banking lo stesso periodo in CSV o Excel."}
             </p>
           ) : (
             <>
-              <p className="mt-1 text-sm text-fg">{diagnosis(stage.stats)}</p>
+              <p className="mt-1 text-sm text-fg">
+                {diagnosis(stage.stats)}
+                {stage.ocr && ' Il testo viene dal riconoscimento ottico: con le foto può essere incompleto, una scansione più nitida aiuta.'}
+              </p>
               <p className="mt-2 text-sm text-fg-2">
                 Qui sotto c'è il testo che ho estratto da {stage.pages} {stage.pages === 1 ? 'pagina' : 'pagine'}, così come lo vedo io: da qui si capisce come adattare la lettura al tuo estratto.
               </p>
@@ -719,7 +759,7 @@ function PdfReview({
         <div className="flex items-center gap-2 text-sm text-fg-2">
           <FileText size={16} className="text-accent" />
           <span className="truncate font-medium text-fg">{stage.name}</span>
-          <span className="ml-auto shrink-0 rounded-full border border-line px-2 py-0.5 text-[11px]">PDF · beta</span>
+          <span className="ml-auto shrink-0 rounded-full border border-line px-2 py-0.5 text-[11px]">{stage.result.ocr ? 'OCR · beta' : 'PDF · beta'}</span>
         </div>
         <h2 className="mt-4 text-lg font-semibold text-fg">
           {drafts.length} movimenti in {stage.result.pages} {stage.result.pages === 1 ? 'pagina' : 'pagine'}
@@ -749,6 +789,17 @@ function PdfReview({
                 </label>
               )
             })}
+          </div>
+        )}
+        {stage.result.ocr && (
+          <div className="mt-3 flex items-start gap-2 rounded-xl border border-warning/40 bg-warning/10 p-3 text-sm">
+            <TriangleAlert size={16} className="mt-0.5 shrink-0 text-warning" />
+            <span className="text-fg">
+              {stage.result.ocr.pages === stage.result.pages
+                ? 'Ho letto il file con il riconoscimento ottico (OCR)'
+                : `Ho letto ${stage.result.ocr.pages} pagine su ${stage.result.pages} con il riconoscimento ottico (OCR)`}
+              , affidabilità media {Math.round(stage.result.ocr.confidence)}%. Una cifra letta male è possibile: controlla gli importi, soprattutto se il controllo dei saldi non torna.
+            </span>
           </div>
         )}
         {stage.result.holder && (

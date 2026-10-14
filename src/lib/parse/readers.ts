@@ -1,13 +1,14 @@
 import Papa from 'papaparse'
 import type { Grid } from './table'
 
-export type FileKind = 'csv' | 'xlsx' | 'pdf'
+export type FileKind = 'csv' | 'xlsx' | 'pdf' | 'image'
 
 export function fileKind(file: File): FileKind | null {
   const name = file.name.toLowerCase()
   if (name.endsWith('.csv') || name.endsWith('.txt') || name.endsWith('.tsv') || file.type === 'text/csv') return 'csv'
   if (name.endsWith('.xlsx') || name.endsWith('.xlsm')) return 'xlsx'
   if (name.endsWith('.pdf') || file.type === 'application/pdf') return 'pdf'
+  if (/\.(jpe?g|png|webp|heic|heif)$/.test(name) || file.type.startsWith('image/')) return 'image'
   return null
 }
 

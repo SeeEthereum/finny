@@ -1,3 +1,4 @@
+import { ImportError } from './readers'
 import type { DraftTx } from './table'
 import { parseAmount, parseDate } from './values'
 
@@ -51,6 +52,8 @@ export interface PdfResult {
   /** 'rows': every movement carries its date; 'grouped': movements under a heading with the day; 'labeled': "Data … Importo …" pairs */
   layout: 'rows' | 'grouped' | 'labeled'
   check?: BalanceCheck
+  /** pages read with OCR because they were images, and Tesseract's mean confidence (0-100) */
+  ocr?: { pages: number; confidence: number }
   pages: number
   /** the text Finny extracted, line by line, for the diagnostic view when nothing is found */
   text: string[]
@@ -88,6 +91,8 @@ export interface RawTextItem {
   transform: number[]
   width: number
   height?: number
+  /** a whole word (OCR output): always joined to its neighbours with a space */
+  word?: boolean
 }
 
 /**
@@ -97,7 +102,7 @@ export interface RawTextItem {
  * whose baselines differ by a fraction of the font height share a line.
  */
 export function pageLines(raw: RawTextItem[], viewport: { transform: number[]; height: number }, page: number): PdfLine[] {
-  interface Placed { x: number; top: number; w: number; h: number; str: string }
+  interface Placed { x: number; top: number; w: number; h: number; str: string; word?: boolean }
   const items = raw.filter((it) => it.str && it.str.trim()).map((it) => ({ it, m: mul(viewport.transform, it.transform) }))
   // the direction most of the text runs in, in quarter turns: some statements draw a landscape
   // table sideways on a portrait page without marking the page as rotated
@@ -117,7 +122,7 @@ export function pageLines(raw: RawTextItem[], viewport: { transform: number[]; h
     const charW = w / len
     const lead = len - it.str.trimStart().length
     const trail = len - it.str.trimEnd().length
-    placed.push({ x: m[4] + lead * charW, top: m[5], w: w - (lead + trail) * charW, h, str: it.str.trim() })
+    placed.push({ x: m[4] + lead * charW, top: m[5], w: w - (lead + trail) * charW, h, str: it.str.trim(), word: it.word })
   }
   placed.sort((a, b) => a.top - b.top || a.x - b.x)
 
@@ -138,7 +143,7 @@ export function pageLines(raw: RawTextItem[], viewport: { transform: number[]; h
       const em = Math.min(prev?.h ?? p.h, p.h)
       const gap = prev ? p.x - (prev.x + prev.w) : Infinity
       if (prev && gap < 0.6 * em && gap > -em) {
-        prev.str += gap > 0.15 * em ? ` ${p.str}` : p.str
+        prev.str += gap > 0.15 * em || p.word ? ` ${p.str}` : p.str
         prev.w = Math.max(prev.w, p.x + p.w - prev.x)
       } else cells.push({ x: p.x, w: p.w, h: p.h, str: p.str })
       last = p
@@ -167,12 +172,53 @@ export async function linesFromDocument(doc: PdfDocLike): Promise<PdfLine[]> {
   return lines
 }
 
-export async function extractLines(file: File, password?: string): Promise<{ lines: PdfLine[]; pages: number }> {
+export interface ReadProgress {
+  /** 'text': reading the PDF's own text; 'ocr': recognising a scanned page or a photo */
+  stage: 'text' | 'ocr'
+  page: number
+  pages: number
+  /** 0-1 within the current page, during OCR */
+  progress?: number
+}
+
+export interface ReadOptions {
+  password?: string
+  onProgress?: (p: ReadProgress) => void
+  signal?: AbortSignal
+}
+
+/** Thrown when the user stops a long read */
+export class ReadCancelled extends Error {
+  constructor() {
+    super('Lettura annullata')
+  }
+}
+
+/** A page with less text than this is an image (a scan) and is read with OCR */
+const MIN_PAGE_CHARS = 20
+/** render scale for OCR: 3 × 72 = 216 dpi, enough for statement-sized print */
+const OCR_SCALE = 3
+/** OCR items are already upright and measured from the top of the page */
+const UPRIGHT = (height: number) => ({ transform: [1, 0, 0, 1, 0, 0], height })
+
+function untilAborted<T>(work: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return work
+  if (signal.aborted) return Promise.reject(new ReadCancelled())
+  return Promise.race([work, new Promise<never>((_, reject) => signal.addEventListener('abort', () => reject(new ReadCancelled()), { once: true }))])
+}
+
+export async function extractLines(file: File, opts: ReadOptions = {}): Promise<{ lines: PdfLine[]; pages: number; ocr?: PdfResult['ocr'] }> {
+  const { onProgress, signal } = opts
   // the legacy build also runs on browsers that lack the newest JavaScript features (older Safari/iOS)
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
   const worker = await import('pdfjs-dist/legacy/build/pdf.worker.mjs?url')
   pdfjs.GlobalWorkerOptions.workerSrc = worker.default
-  const task = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()), password })
+  const task = pdfjs.getDocument({
+    data: new Uint8Array(await file.arrayBuffer()),
+    password: opts.password,
+    // decoders for the image formats scans use (JBIG2, JPEG 2000), served by this site
+    wasmUrl: new URL('pdfjs/wasm/', document.baseURI).href,
+  })
   let doc
   try {
     doc = await task.promise
@@ -184,7 +230,45 @@ export async function extractLines(file: File, password?: string): Promise<{ lin
     throw e
   }
   try {
-    return { lines: await linesFromDocument(doc), pages: doc.numPages }
+    const perPage: PdfLine[][] = []
+    const scanned: number[] = []
+    for (let p = 1; p <= doc.numPages; p++) {
+      if (signal?.aborted) throw new ReadCancelled()
+      const page = await doc.getPage(p)
+      const content = await page.getTextContent()
+      const items = (content.items as unknown[]).filter((i): i is RawTextItem => !!i && typeof i === 'object' && 'str' in i && 'transform' in i)
+      const chars = items.reduce((a, i) => a + i.str.trim().length, 0)
+      if (chars < MIN_PAGE_CHARS) scanned.push(p)
+      perPage.push(chars < MIN_PAGE_CHARS ? [] : pageLines(items, page.getViewport({ scale: 1 }), p))
+      onProgress?.({ stage: 'text', page: p, pages: doc.numPages })
+    }
+    if (!scanned.length) return { lines: perPage.flat(), pages: doc.numPages }
+
+    // pages without text are pictures of paper: render them and read them with OCR
+    const { startOcr } = await import('./ocr')
+    const engine = await untilAborted(startOcr(), signal)
+    let confidence = 0
+    try {
+      for (const [k, p] of scanned.entries()) {
+        if (signal?.aborted) throw new ReadCancelled()
+        const page = await doc.getPage(p)
+        const viewport = page.getViewport({ scale: OCR_SCALE })
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.ceil(viewport.width)
+        canvas.height = Math.ceil(viewport.height)
+        await page.render({ canvas, viewport, background: '#ffffff' }).promise
+        const read = await untilAborted(
+          engine.read(canvas, OCR_SCALE, (progress) => onProgress?.({ stage: 'ocr', page: k + 1, pages: scanned.length, progress })),
+          signal,
+        )
+        confidence += read.confidence
+        perPage[p - 1] = pageLines(read.items, UPRIGHT(read.height), p)
+        canvas.width = canvas.height = 0
+      }
+    } finally {
+      void engine.close()
+    }
+    return { lines: perPage.flat(), pages: doc.numPages, ocr: { pages: scanned.length, confidence: confidence / scanned.length } }
   } finally {
     void task.destroy()
   }
@@ -929,7 +1013,28 @@ function findHolder(lines: PdfLine[]): string | undefined {
   return undefined
 }
 
-export async function readPdf(file: File, password?: string): Promise<PdfResult> {
-  const { lines, pages } = await extractLines(file, password)
-  return parsePdfLines(lines, pages)
+export async function readPdf(file: File, opts: ReadOptions = {}): Promise<PdfResult> {
+  const { lines, pages, ocr } = await extractLines(file, opts)
+  return { ...parsePdfLines(lines, pages), ocr }
+}
+
+/** A photo or a picture of a statement (JPG, PNG, WebP), read with OCR */
+export async function readImage(file: File, opts: ReadOptions = {}): Promise<PdfResult> {
+  const { imageCanvas, startOcr } = await import('./ocr')
+  let picture
+  try {
+    picture = await imageCanvas(file)
+  } catch {
+    throw new ImportError('Non riesco ad aprire questa immagine. Usa una foto JPG o PNG (le foto HEIC dell\'iPhone vanno prima convertite, oppure scattate dal sito).')
+  }
+  const engine = await untilAborted(startOcr(), opts.signal)
+  try {
+    const read = await untilAborted(
+      engine.read(picture.canvas, picture.scale, (progress) => opts.onProgress?.({ stage: 'ocr', page: 1, pages: 1, progress })),
+      opts.signal,
+    )
+    return { ...parsePdfLines(pageLines(read.items, UPRIGHT(read.height), 1), 1), ocr: { pages: 1, confidence: read.confidence } }
+  } finally {
+    void engine.close()
+  }
 }

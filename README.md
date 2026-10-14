@@ -49,6 +49,7 @@ npm run build      # build statica in dist/, pubblicabile su qualsiasi hosting
   - dal segno scritto;
   - in ultima istanza, dalle parole della causale.
   Se l'estratto stampa i saldi, l'anteprima dice se saldo iniziale + movimenti = saldo finale. I test in `src/lib/parse/pdf.test.ts` generano PDF veri per ciascun caso e li leggono con pdf.js.
+- **Scansioni e foto (OCR, beta)**: le pagine di un PDF senza testo e le foto JPG/PNG/WebP vengono lette con il riconoscimento ottico ([Tesseract](https://github.com/tesseract-ocr/tesseract) via tesseract.js), **nel browser**: l'immagine non lascia il dispositivo. Motore e modello per l'italiano (~5 MB) sono serviti dal sito stesso (`dist/ocr/`, copiati da `node_modules` in build) e scaricati solo la prima volta che serve. Ci vogliono alcuni secondi per pagina; un errore su una cifra è possibile, per questo l'anteprima mostra l'affidabilità e il controllo dei saldi. La CSP include `'wasm-unsafe-eval'`, necessario a compilare WebAssembly (non abilita `eval`).
 
 ## Architettura
 
@@ -65,7 +66,7 @@ src/
   pages/          una vista per sezione, caricate on demand
 ```
 
-Stack: Vite, React 19, TypeScript, Tailwind CSS 4, Motion, pdf.js, read-excel-file, Papa Parse.
+Stack: Vite, React 19, TypeScript, Tailwind CSS 4, Motion, pdf.js, tesseract.js, read-excel-file, Papa Parse.
 
 ### Design
 
